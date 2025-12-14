@@ -216,18 +216,6 @@
       db.ref('queue/' + number).remove().catch(e => console.error(e));
     }
     // ------------------------------------------------
-
-    //Добавляем голосовое уведомление
-    function markIn(number) {
-  firebase.database().ref('queue/' + number).update({
-    status: 'in',
-    announced: false
-  });
-}
-//------------------
   </script>
-
-  
-
 </body>
 </html>
