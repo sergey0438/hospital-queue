@@ -223,13 +223,16 @@ function speakNumber(number) {
 //---------------
 let soundEnabled = false;
 
-document.getElementById('enableSound').addEventListener('click', () => {
-  const test = new SpeechSynthesisUtterance('Голосовые объявления включены');
-  test.lang = 'ru-RU';
-  speechSynthesis.speak(test);
+const soundBtn = document.getElementById('enableSound');
 
-  soundEnabled = true;
-});
+if (soundBtn) {
+  soundBtn.addEventListener('click', () => {
+    const test = new SpeechSynthesisUtterance('Голосовые объявления включены');
+    test.lang = 'ru-RU';
+    speechSynthesis.speak(test);
+    soundEnabled = true;
+  });
+}
 
 
 
