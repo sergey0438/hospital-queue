@@ -141,31 +141,27 @@ function createCard(key, data) {
 // Обновление очереди
 db.ref('queue').on('value', snapshot => {
   const newKeys = new Set();
+  let nextNumberToAnnounce = null;
 
   snapshot.forEach(s => {
     const data = s.val();
     const number = s.key;
 
-    // 🟥 показываем ожидающих
+    // показываем ожидающих
     if (data.status === 'waiting') {
       newKeys.add(number);
       if (!currentCards[number]) {
         currentCards[number] = createCard(number, data);
       }
-    }
 
-    // 🔊 голосовое объявление
-    if (data.status === 'in' && data.announced !== true) {
-      speakNumber(number);
-
-      // помечаем, что номер уже озвучен
-      db.ref('queue/' + number).update({
-        announced: true
-      });
+      // первый ожидающий = следующий
+      if (!nextNumberToAnnounce && data.announced !== true) {
+        nextNumberToAnnounce = number;
+      }
     }
   });
 
-  // ❌ убираем карточки, которых больше нет
+  // убираем карточки, которых больше нет
   for (const key in currentCards) {
     if (!newKeys.has(key)) {
       const card = currentCards[key];
@@ -177,7 +173,17 @@ db.ref('queue').on('value', snapshot => {
       delete currentCards[key];
     }
   }
+
+  // 🔊 объявляем СЛЕДУЮЩЕГО
+  if (nextNumberToAnnounce) {
+    speakNumber(nextNumberToAnnounce);
+
+    db.ref('queue/' + nextNumberToAnnounce).update({
+      announced: true
+    });
+  }
 });
+
 
 
 //Добавляем голосовое уведомление
