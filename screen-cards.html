@@ -1,103 +1,21 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="uk">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Електронна черга</title>
+<title>Екран черги</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
-body {
-  margin: 0;
-  padding: 0;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #000;
-  color: #fff;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: url('./bg_logo.png') no-repeat center center;
-  background-size: 100%;
-}
-
-.header {
-  width: 100%;
-  text-align: center;
-  padding: 1rem 0;
-  background-color: rgba(0,0,0,0.6);
-  font-size: 2rem;
-  font-weight: bold;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-}
-
-.queue-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 1rem;
-  padding: 2rem;
-  width: 100%;
-  max-width: 1200px;
-  margin-top: 2rem;
-}
-
-.patient-card {
-  background-color: #d32f2f;
-  color: white;
-  border-radius: 15px;
-  padding: 1.5rem;
-  text-align: center;
-  font-size: 1.5rem;
-  box-shadow: 0 0 15px rgba(255,0,0,0.7);
-  transition: transform 0.5s, opacity 0.5s, box-shadow 0.3s;
-  opacity: 0;
-  transform: translateY(-20px);
-}
-
-.patient-card.show {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.patient-number {
-  font-size: 3rem;
-  font-weight: bold;
-}
-
-@media (max-width: 768px) {
-  .queue-container {
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 0.5rem;
-    padding: 1rem;
-  }
-
-  .patient-card {
-    padding: 1rem;
-    font-size: 1.2rem;
-  }
-
-  .patient-number {
-    font-size: 2rem;
-  }
-}
-
-#enableSoundBtn {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 1000;
-  padding: 10px 15px;
-  font-size: 1rem;
-}
+body { margin:0; font-family:sans-serif; background:#000; color:#fff; display:flex; flex-direction:column; align-items:center; min-height:100vh; }
+.queue-container { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:1rem; padding:2rem; width:100%; max-width:1200px; margin-top:2rem; }
+.patient-card { background:#d32f2f; color:#fff; border-radius:15px; padding:1.5rem; text-align:center; font-size:1.5rem; box-shadow:0 0 15px rgba(255,0,0,0.7); opacity:0; transform:translateY(-20px); transition:0.5s; }
+.patient-card.show { opacity:1; transform:translateY(0); }
+.patient-number { font-size:3rem; font-weight:bold; }
 </style>
 </head>
 <body>
-  <div class="header">Електронна черга</div>
-  <div class="header">Шановні пацієнти! Після зникнення поточного номера на екрані наступний номер може заходити до кабінету №3.</div>
-  <div class="queue-container" id="queueScreen"></div>
-
-  <!-- Кнопка включения звука -->
-  <button id="enableSoundBtn" class="btn btn-success">Включить звук 🔊</button>
+<h1 class="text-center mt-3">Електронна черга</h1>
+<div class="queue-container" id="queueScreen"></div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -111,76 +29,40 @@ const firebaseConfig = {
   messagingSenderId: "23042968926",
   appId: "1:23042968926:web:9c75f87c5337af630653cf"
 };
-
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 const queueScreen = document.getElementById('queueScreen');
 let currentCards = {};
-let soundEnabled = false;
 
-// Создание карточки пациента
-function createCard(key) {
+function createCard(key, data){
   const card = document.createElement('div');
-  card.className = 'patient-card';
-  card.innerHTML = `<div class="patient-number">№${key}</div>`;
+  card.className='patient-card';
+  card.innerHTML=`<div class="patient-number">№${key}</div><div>${data.name}</div>`;
   queueScreen.appendChild(card);
-  setTimeout(() => card.classList.add('show'), 50);
+  setTimeout(()=>card.classList.add('show'),50);
   return card;
 }
 
-// Обновление очереди
 db.ref('queue').on('value', snapshot => {
   const newKeys = new Set();
-  let nextNumberToAnnounce = null;
-
-  snapshot.forEach(s => {
-    const data = s.val();
-    const number = s.key;
-
-    if (data.status === 'waiting') {
+  snapshot.forEach(s=>{
+    const data=s.val();
+    const number=s.key;
+    if(data.status==='waiting'){
       newKeys.add(number);
-      if (!currentCards[number]) currentCards[number] = createCard(number);
-      if (!nextNumberToAnnounce && !data.announced) nextNumberToAnnounce = number;
+      if(!currentCards[number]) currentCards[number]=createCard(number,data);
     }
   });
 
-  for (const key in currentCards) {
-    if (!newKeys.has(key)) {
-      const card = currentCards[key];
+  for(const key in currentCards){
+    if(!newKeys.has(key)){
+      const card=currentCards[key];
       card.classList.remove('show');
-      card.style.opacity = '0';
-      card.style.transform = 'translateY(-20px)';
-      setTimeout(() => card.remove(), 500);
+      setTimeout(()=>card.remove(),500);
       delete currentCards[key];
     }
   }
-
-  if (nextNumberToAnnounce && soundEnabled) {
-    speakNumber(nextNumberToAnnounce);
-    db.ref('queue/' + nextNumberToAnnounce).update({ announced: true });
-  }
-});
-
-// Голосовое объявление
-function speakNumber(number) {
-  if (!('speechSynthesis' in window)) return;
-  const text = `Пацієнт номер ${number}, Ви наступний`;
-  const msg = new SpeechSynthesisUtterance(text);
-  msg.lang = 'uk-UA';
-  msg.rate = 0.9;
-  msg.pitch = 1;
-  speechSynthesis.cancel();
-  speechSynthesis.speak(msg);
-}
-
-// Обработчик кнопки
-document.getElementById('enableSoundBtn').addEventListener('click', () => {
-  soundEnabled = true;
-  const msg = new SpeechSynthesisUtterance('Голосовые объявления включены');
-  msg.lang = 'uk-UA';
-  speechSynthesis.speak(msg);
-  document.getElementById('enableSoundBtn').style.display = 'none'; // скрываем кнопку
 });
 </script>
 </body>
