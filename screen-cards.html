@@ -194,9 +194,9 @@ function speakNumber(number) {
   msg.pitch = 1;
 
   setTimeout(() => {
-    speechSynthesis.cancel();
+    
     speechSynthesis.speak(msg);
-  }, 400);
+  }, 100);
 }
 
 
@@ -205,21 +205,13 @@ let soundEnabled = false;
 
 document.getElementById('enableSound').addEventListener('click', () => {
   const test = new SpeechSynthesisUtterance('Голосовые объявления включены');
-  test.lang = 'ru-RU';
+  test.lang = 'uk-UA';
   speechSynthesis.speak(test);
 
   soundEnabled = true;
 });
 
-window.onload = () => {
-  setTimeout(() => {
-    const test = new SpeechSynthesisUtterance(
-      'Тест звука. Если вы это слышите, значит голос работает'
-    );
-    test.lang = 'ru-RU';
-    speechSynthesis.speak(test);
-  }, 1000);
-};
+
 
 
 </script>
