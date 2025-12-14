@@ -182,22 +182,23 @@ db.ref('queue').on('value', snapshot => {
 
 //Добавляем голосовое уведомление
 function speakNumber(number) {
-  if (!soundEnabled) return;
+  if (!soundEnabled) return; // если звук не включен, просто выходим
   if (!('speechSynthesis' in window)) return;
 
   const text = `Пацієнт номер ${number}, Ви наступний`;
-  console.log('Озвучиваем:', text);
-
   const msg = new SpeechSynthesisUtterance(text);
   msg.lang = 'uk-UA';
   msg.rate = 0.9;
   msg.pitch = 1;
 
-  setTimeout(() => {
-    
-    speechSynthesis.speak(msg);
-  }, 100);
+  msg.onend = () => {
+    // Ставим announced: true только после окончания озвучки
+    db.ref('queue/' + number).update({ announced: true });
+  };
+
+  speechSynthesis.speak(msg);
 }
+
 
 
 //---------------
