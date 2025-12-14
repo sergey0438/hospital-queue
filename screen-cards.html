@@ -192,31 +192,32 @@ document.getElementById('enableSound').addEventListener('click', () => {
 
 function speakNumber(number) {
   if (!soundEnabled) return;
+  if (!('speechSynthesis' in window)) return;
 
-  const msg = new SpeechSynthesisUtterance(`Пацієнт номер ${number}, Ви наступний`);
+  const text = `Пацієнт номер ${number}, Ви наступний`;
+  console.log('Озвучиваем:', text);
+
+  const msg = new SpeechSynthesisUtterance(text);
   msg.lang = 'uk-UA';
   msg.rate = 0.9;
   msg.pitch = 1;
 
-  // Только после реальной озвучки ставим announced = true
-  msg.onend = () => {
-    db.ref('queue/' + number).update({ announced: true });
-  };
-
-  speechSynthesis.speak(msg);
+  setTimeout(() => {
+    
+    speechSynthesis.speak(msg);
+  }, 100);
 }
 
-// Слушатель Firebase
-db.ref('queue').on('value', snapshot => {
-  snapshot.forEach(s => {
-    const data = s.val();
-    const number = s.key;
 
-    // Только если статус "in" и ещё не озвучено и включён звук
-    if (data.status === 'in' && data.announced !== true && soundEnabled) {
-      speakNumber(number);
-    }
-  });
+//---------------
+let soundEnabled = false;
+
+document.getElementById('enableSound').addEventListener('click', () => {
+  const test = new SpeechSynthesisUtterance('Голосовые объявления включены');
+  test.lang = 'uk-UA';
+  speechSynthesis.speak(test);
+
+  soundEnabled = true;
 });
 
 
