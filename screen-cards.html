@@ -64,12 +64,6 @@ body {
   font-weight: bold;
 }
 
-.patient-name {
-  margin-top: 0.5rem;
-  font-size: 1.5rem;
-  font-weight: 500;
-}
-
 @media (max-width: 768px) {
   .queue-container {
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -85,18 +79,12 @@ body {
   .patient-number {
     font-size: 2rem;
   }
-
-  .patient-name {
-    font-size: 1.2rem;
-  }
 }
 </style>
 </head>
-<body onclick="soundEnabled = true;">
+<body>
   <div class="header">Електронна черга</div>
- 
-  <div class="header">Шановні пацієнти!
-Після зникнення поточного номера на екрані наступний номер може заходити до кабінету №3.</div>
+  <div class="header">Шановні пацієнти! Після зникнення поточного номера на екрані наступний номер може заходити до кабінету №3.</div>
   <div class="queue-container" id="queueScreen"></div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -105,32 +93,34 @@ body {
 <script>
 const firebaseConfig = {
   apiKey: "https://kharkiv-regional-default-rtdb.europe-west1.firebasedatabase.app/",
-      authDomain: "hospital-queue.firebaseapp.com",
-      databaseURL: "https://kharkiv-regional-default-rtdb.europe-west1.firebasedatabase.app/",
-      projectId: "hospital-queue",
-      storageBucket: "hospital-queue.appspot.com",
-      messagingSenderId: "23042968926",
-      appId: "1:23042968926:web:9c75f87c5337af630653cf"
+  authDomain: "hospital-queue.firebaseapp.com",
+  databaseURL: "https://kharkiv-regional-default-rtdb.europe-west1.firebasedatabase.app/",
+  projectId: "hospital-queue",
+  storageBucket: "hospital-queue.appspot.com",
+  messagingSenderId: "23042968926",
+  appId: "1:23042968926:web:9c75f87c5337af630653cf"
 };
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 const queueScreen = document.getElementById('queueScreen');
-let currentCards = {}; // хранит текущие отображаемые карточки
+let currentCards = {}; // текущие карточки
+let soundEnabled = false;
 
-// Функция создания карточки
-function createCard(key, data) {
+// Отслеживаем флаг включения звука
+db.ref('system/soundEnabled').on('value', snap => {
+  soundEnabled = snap.val() === true;
+});
+
+// Создание карточки
+function createCard(key) {
   const card = document.createElement('div');
   card.className = 'patient-card';
   card.innerHTML = `<div class="patient-number">№${key}</div>`;
   queueScreen.appendChild(card);
 
-  // плавное появление
-  setTimeout(() => {
-    card.classList.add('show');
-  }, 50);
-
+  setTimeout(() => card.classList.add('show'), 50);
   return card;
 }
 
@@ -143,95 +133,49 @@ db.ref('queue').on('value', snapshot => {
     const data = s.val();
     const number = s.key;
 
-    // показываем ожидающих
+    // Показываем ожидающих
     if (data.status === 'waiting') {
       newKeys.add(number);
-      if (!currentCards[number]) {
-        currentCards[number] = createCard(number, data);
-      }
+      if (!currentCards[number]) currentCards[number] = createCard(number);
 
-      // первый ожидающий = следующий
       if (!nextNumberToAnnounce && data.announced !== true) {
         nextNumberToAnnounce = number;
       }
     }
   });
 
-  // убираем карточки, которых больше нет
+  // Убираем карточки которых больше нет
   for (const key in currentCards) {
     if (!newKeys.has(key)) {
       const card = currentCards[key];
       card.classList.remove('show');
       card.style.opacity = '0';
       card.style.transform = 'translateY(-20px)';
-
       setTimeout(() => card.remove(), 500);
       delete currentCards[key];
     }
   }
 
-  db.ref('system/callNext').on('value', snap => {
-  if (snap.val() !== true) return;
-
-  db.ref('queue').once('value', snapshot => {
-    let nextNumber = null;
-
-    snapshot.forEach(s => {
-      const data = s.val();
-      if (!nextNumber && data.status === 'waiting') {
-        nextNumber = s.key;
-      }
-    });
-
-    if (nextNumber) {
-      speakNumber(nextNumber);
-      db.ref('queue/' + nextNumber).update({ announced: true });
-    }
-
-    db.ref('system/callNext').set(false);
-  });
+  // Объявляем следующий номер
+  if (nextNumberToAnnounce) {
+    speakNumber(nextNumberToAnnounce);
+    db.ref('queue/' + nextNumberToAnnounce).update({ announced: true });
+  }
 });
 
-
-});
-
-
-
-//Добавляем голосовое уведомление
+// Функция озвучивания номера
 function speakNumber(number) {
   if (!soundEnabled) return;
   if (!('speechSynthesis' in window)) return;
 
-  const text = `Пацієнт номер ${number}, Ви наступний`;
-  console.log('Озвучиваем:', text);
-
-  const msg = new SpeechSynthesisUtterance(text);
+  const msg = new SpeechSynthesisUtterance(`Пацієнт номер ${number}, Ви наступний`);
   msg.lang = 'uk-UA';
   msg.rate = 0.9;
   msg.pitch = 1;
 
-  setTimeout(() => {
-    speechSynthesis.cancel();
-    speechSynthesis.speak(msg);
-  }, 400);
+  speechSynthesis.cancel();
+  speechSynthesis.speak(msg);
 }
-
-
-//---------------
-let soundEnabled = false;
-
-const soundBtn = document.getElementById('enableSound');
-
-if (soundBtn) {
-  soundBtn.addEventListener('click', () => {
-    const test = new SpeechSynthesisUtterance('Голосовые объявления включены');
-    test.lang = 'ru-RU';
-    speechSynthesis.speak(test);
-    soundEnabled = true;
-  });
-}
-
-
 
 </script>
 </body>

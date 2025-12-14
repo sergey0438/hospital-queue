@@ -226,5 +226,15 @@
 }
 //------------------
   </script>
+
+  <button id="enableSound" class="btn btn-success">Включить голосовые объявления</button>
+
+<script>
+document.getElementById('enableSound').addEventListener('click', () => {
+  firebase.database().ref('system/soundEnabled').set(true);
+  alert('Голосовые объявления включены');
+});
+</script>
+
 </body>
 </html>
