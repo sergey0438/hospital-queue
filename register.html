@@ -212,9 +212,12 @@
 
     // Удаление / отметка "в кабинет"
     function markIn(number) {
-      // Можно полностью удалить запись
-      db.ref('queue/' + number).remove().catch(e => console.error(e));
-    }
+  db.ref('queue/' + number).update({
+    status: 'in',
+    announced: false
+  });
+}
+
     // ------------------------------------------------
   </script>
 </body>
