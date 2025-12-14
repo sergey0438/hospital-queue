@@ -185,16 +185,13 @@ db.ref('queue').on('value', snapshot => {
 
     if (nextNumber) {
       speakNumber(nextNumber);
-
-      db.ref('queue/' + nextNumber).update({
-        announced: true
-      });
+      db.ref('queue/' + nextNumber).update({ announced: true });
     }
 
-    // сбрасываем флаг
     db.ref('system/callNext').set(false);
   });
 });
+
 
 });
 
