@@ -185,11 +185,11 @@ function speakNumber(number) {
   if (!soundEnabled) return;
   if (!('speechSynthesis' in window)) return;
 
-  const text = `Пациент номер ${number}, пройдите в кабинет`;
+  const text = `Пацієнт номер ${number}, Ви наступний`;
   console.log('Озвучиваем:', text);
 
   const msg = new SpeechSynthesisUtterance(text);
-  msg.lang = 'ru-RU';
+  msg.lang = 'uk-UA';
   msg.rate = 0.9;
   msg.pitch = 1;
 
