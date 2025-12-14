@@ -94,11 +94,7 @@ body {
 </head>
 <body>
   <div class="header">Електронна черга</div>
-  <div style="margin: 20px;">
-  <button id="enableSound" class="btn btn-success btn-lg">
-    🔊 Включить голосовые объявления
-  </button>
-</div>
+ 
   <div class="header">Шановні пацієнти!
 Після зникнення поточного номера на екрані наступний номер може заходити до кабінету №3.</div>
   <div class="queue-container" id="queueScreen"></div>
@@ -174,14 +170,32 @@ db.ref('queue').on('value', snapshot => {
     }
   }
 
-  // 🔊 объявляем СЛЕДУЮЩЕГО
-  if (nextNumberToAnnounce) {
-    speakNumber(nextNumberToAnnounce);
+  db.ref('system/callNext').on('value', snap => {
+  if (snap.val() !== true) return;
 
-    db.ref('queue/' + nextNumberToAnnounce).update({
-      announced: true
+  db.ref('queue').once('value', snapshot => {
+    let nextNumber = null;
+
+    snapshot.forEach(s => {
+      const data = s.val();
+      if (!nextNumber && data.status === 'waiting') {
+        nextNumber = s.key;
+      }
     });
-  }
+
+    if (nextNumber) {
+      speakNumber(nextNumber);
+
+      db.ref('queue/' + nextNumber).update({
+        announced: true
+      });
+    }
+
+    // сбрасываем флаг
+    db.ref('system/callNext').set(false);
+  });
+});
+
 });
 
 
@@ -217,15 +231,6 @@ document.getElementById('enableSound').addEventListener('click', () => {
   soundEnabled = true;
 });
 
-window.onload = () => {
-  setTimeout(() => {
-    const test = new SpeechSynthesisUtterance(
-      'Тест звука. Если вы это слышите, значит голос работает'
-    );
-    test.lang = 'ru-RU';
-    speechSynthesis.speak(test);
-  }, 1000);
-};
 
 
 </script>
