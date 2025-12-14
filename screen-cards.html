@@ -181,35 +181,42 @@ db.ref('queue').on('value', snapshot => {
 
 
 //Добавляем голосовое уведомление
-function speakNumber(number) {
-  if (!soundEnabled) return; // если звук не включен, просто выходим
-  if (!('speechSynthesis' in window)) return;
+let soundEnabled = false;
 
-  const text = `Пацієнт номер ${number}, Ви наступний`;
-  const msg = new SpeechSynthesisUtterance(text);
+document.getElementById('enableSound').addEventListener('click', () => {
+  soundEnabled = true;
+  const test = new SpeechSynthesisUtterance('Голосовые объявления включены');
+  test.lang = 'uk-UA';
+  speechSynthesis.speak(test);
+});
+
+function speakNumber(number) {
+  if (!soundEnabled) return;
+
+  const msg = new SpeechSynthesisUtterance(`Пацієнт номер ${number}, Ви наступний`);
   msg.lang = 'uk-UA';
   msg.rate = 0.9;
   msg.pitch = 1;
 
+  // Только после реальной озвучки ставим announced = true
   msg.onend = () => {
-    // Ставим announced: true только после окончания озвучки
     db.ref('queue/' + number).update({ announced: true });
   };
 
   speechSynthesis.speak(msg);
 }
 
+// Слушатель Firebase
+db.ref('queue').on('value', snapshot => {
+  snapshot.forEach(s => {
+    const data = s.val();
+    const number = s.key;
 
-
-//---------------
-let soundEnabled = false;
-
-document.getElementById('enableSound').addEventListener('click', () => {
-  const test = new SpeechSynthesisUtterance('Голосовые объявления включены');
-  test.lang = 'uk-UA';
-  speechSynthesis.speak(test);
-
-  soundEnabled = true;
+    // Только если статус "in" и ещё не озвучено и включён звук
+    if (data.status === 'in' && data.announced !== true && soundEnabled) {
+      speakNumber(number);
+    }
+  });
 });
 
 
