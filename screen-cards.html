@@ -93,27 +93,19 @@ body {
 </style>
 </head>
 <body>
-  <button id="enableSound"
-  style="
-    position: fixed;
-    bottom: 30px;
-    right: 30px;
-    z-index: 9999;
-    font-size: 24px;
-    padding: 15px 25px;
-    border-radius: 12px;
-    border: none;
-    background: #28a745;
-    color: #fff;
-    box-shadow: 0 0 20px rgba(0,0,0,.5);
-  ">
-  🔊 Активувати звук
+  <button id="unlock"
+  style="position:fixed;bottom:20px;left:20px;z-index:9999">
+  Увімкнути звук
 </button>
+
 
   <div class="header">Електронна черга</div>
   <div class="header">Шановні пацієнти!
 Після зникнення поточного номера на екрані наступний номер може заходити до кабінету №3.</div>
   <div class="queue-container" id="queueScreen"></div>
+
+  
+
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -134,31 +126,34 @@ body {
 
   const queueScreen = document.getElementById('queueScreen');
 
+  // 🔓 Разблокировка звука (один раз)
+const unlockBtn = document.getElementById('unlock');
+
+unlockBtn.addEventListener('click', () => {
+  const u = new SpeechSynthesisUtterance('Звук активовано');
+  u.lang = 'uk-UA';
+  speechSynthesis.speak(u);
+  unlockBtn.remove();
+});
+
+
   // ✅ ВАЖНО: объявляем ДО подписки
   let currentCards = {};
   let lastAnnounced = null;
 
   function speakNext(number) {
-    if (!('speechSynthesis' in window)) return;
+  if (!('speechSynthesis' in window)) return;
 
-    const text = `Наступний номер ${number}, проходьте`;
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'uk-UA';
-    u.rate = 0.9;
-    u.pitch = 1;
-
-    speechSynthesis.cancel();
-    speechSynthesis.speak(u);
-  }
-
-  const enableBtn = document.getElementById('enableSound');
-
-enableBtn.addEventListener('click', () => {
-  const u = new SpeechSynthesisUtterance('Звук активовано');
+  const u = new SpeechSynthesisUtterance(
+    `Наступний номер ${number}, проходьте`
+  );
   u.lang = 'uk-UA';
+  u.rate = 0.9;
+  u.pitch = 1;
+
+  speechSynthesis.cancel();
   speechSynthesis.speak(u);
-  enableBtn.style.display = 'none';
-});
+}
 
 
   function createCard(key, data) {
