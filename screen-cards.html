@@ -102,134 +102,91 @@ body {
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
-const firebaseConfig = {
-  apiKey: "https://kharkiv-regional-default-rtdb.europe-west1.firebasedatabase.app/",
-      authDomain: "hospital-queue.firebaseapp.com",
-      databaseURL: "https://kharkiv-regional-default-rtdb.europe-west1.firebasedatabase.app/",
-      projectId: "hospital-queue",
-      storageBucket: "hospital-queue.appspot.com",
-      messagingSenderId: "23042968926",
-      appId: "1:23042968926:web:9c75f87c5337af630653cf"
-};
+  const firebaseConfig = {
+    apiKey: "https://kharkiv-regional-default-rtdb.europe-west1.firebasedatabase.app/",
+    authDomain: "hospital-queue.firebaseapp.com",
+    databaseURL: "https://kharkiv-regional-default-rtdb.europe-west1.firebasedatabase.app/",
+    projectId: "hospital-queue",
+    storageBucket: "hospital-queue.appspot.com",
+    messagingSenderId: "23042968926",
+    appId: "1:23042968926:web:9c75f87c5337af630653cf"
+  };
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
 
-function speakNext(number) {
-  if (!('speechSynthesis' in window)) return;
+  const queueScreen = document.getElementById('queueScreen');
 
-  const text = `Наступний номер ${number}, проходьте`;
-  const utterance = new SpeechSynthesisUtterance(text);
+  // ✅ ВАЖНО: объявляем ДО подписки
+  let currentCards = {};
+  let lastAnnounced = null;
 
-  utterance.lang = 'uk-UA';
-  utterance.rate = 0.9;
-  utterance.pitch = 1;
+  function speakNext(number) {
+    if (!('speechSynthesis' in window)) return;
 
-  speechSynthesis.cancel();
-  speechSynthesis.speak(utterance);
-}
+    const text = `Наступний номер ${number}, проходьте`;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'uk-UA';
+    u.rate = 0.9;
+    u.pitch = 1;
 
-db.ref('queue').on('value', snapshot => {
-  const newKeys = new Set();
-  const waitingNumbers = [];
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  }
 
-  snapshot.forEach(s => {
-    const data = s.val();
-    if (!data) return;
+  function createCard(key, data) {
+    const card = document.createElement('div');
+    card.className = 'patient-card';
+    card.innerHTML = `
+      <div class="patient-number">№${key}</div>
+      <div class="patient-name">${data.name ?? ''}</div>
+    `;
+    queueScreen.appendChild(card);
 
-    if (data.status === 'waiting') {
-      newKeys.add(s.key);
-      waitingNumbers.push(Number(s.key));
+    setTimeout(() => card.classList.add('show'), 50);
+    return card;
+  }
 
-      if (!currentCards[s.key]) {
-        currentCards[s.key] = createCard(s.key, data);
+  // ✅ Подписка ПОСЛЕ всех объявлений
+  db.ref('queue').on('value', (snapshot) => {
+    const newKeys = new Set();
+    const waitingNumbers = [];
+
+    snapshot.forEach((s) => {
+      const data = s.val();
+      if (!data) return;
+
+      if (data.status === 'waiting') {
+        newKeys.add(s.key);
+        waitingNumbers.push(Number(s.key));
+
+        if (!currentCards[s.key]) {
+          currentCards[s.key] = createCard(s.key, data);
+        }
+      }
+    });
+
+    // Удаляем карточки, которых больше нет
+    for (const key in currentCards) {
+      if (!newKeys.has(key)) {
+        const card = currentCards[key];
+        card.classList.remove('show');
+        setTimeout(() => card.remove(), 500);
+        delete currentCards[key];
+      }
+    }
+
+    // 🔊 объявляем следующий номер (минимальный waiting)
+    if (waitingNumbers.length > 0) {
+      const nextNumber = Math.min(...waitingNumbers);
+
+      if (lastAnnounced !== nextNumber) {
+        lastAnnounced = nextNumber;
+        speakNext(nextNumber);
       }
     }
   });
-
-  // Удаляем карточки, которых больше нет
-  for (const key in currentCards) {
-    if (!newKeys.has(key)) {
-      const card = currentCards[key];
-      card.classList.remove('show');
-      setTimeout(() => card.remove(), 500);
-      delete currentCards[key];
-    }
-  }
-
-  // 🔊 ГОЛОСОВОЕ ОБЪЯВЛЕНИЕ
-  if (waitingNumbers.length > 0) {
-    const nextNumber = Math.min(...waitingNumbers);
-
-    if (lastAnnounced !== nextNumber) {
-      lastAnnounced = nextNumber;
-      speakNext(nextNumber);
-    }
-  }
-});
-
-
-  // Определяем следующий номер
-  if (waitingNumbers.length > 0) {
-    const nextNumber = Math.min(...waitingNumbers);
-
-    if (lastAnnounced !== nextNumber) {
-      lastAnnounced = nextNumber;
-      speakNext(nextNumber);
-    }
-  }
-
-
-
-const queueScreen = document.getElementById('queueScreen');
-let currentCards = {}; // хранит текущие отображаемые карточки
-let lastAnnounced = null; // ⬅ чтобы не повторять голос
-
-
-// Функция создания карточки
-function createCard(key, data) {
-  const card = document.createElement('div');
-  card.className = 'patient-card';
-  card.innerHTML = `<div class="patient-number">№${key}</div><div class="patient-name">${data.name}</div>`;
-  queueScreen.appendChild(card);
-
-  // плавное появление
-  setTimeout(() => {
-    card.classList.add('show');
-  }, 50);
-
-  return card;
-}
-
-
-// Обновление очереди
-db.ref('queue').on('value', snapshot => {
-  const newKeys = new Set();
-  snapshot.forEach(s => {
-    const data = s.val();
-    if (data.status === 'waiting') {
-      newKeys.add(s.key);
-      if (!currentCards[s.key]) {
-        currentCards[s.key] = createCard(s.key, data);
-      }
-    }
-  });
-
-  // удаляем карточки, которых больше нет в очереди
-  for (const key in currentCards) {
-    if (!newKeys.has(key)) {
-      const card = currentCards[key];
-      card.classList.remove('show');
-      card.style.transition = 'opacity 0.5s, transform 0.5s';
-      card.style.opacity = '0';
-      card.style.transform = 'translateY(-20px)';
-      setTimeout(() => {
-        card.remove();
-      }, 500);
-      delete currentCards[key];
-    }
-  }
-});
 </script>
+
 </body>
 </html>
