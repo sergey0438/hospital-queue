@@ -144,16 +144,29 @@ unlockBtn.addEventListener('click', () => {
   function speakNext(number) {
   if (!('speechSynthesis' in window)) return;
 
-  const u = new SpeechSynthesisUtterance(
-    `Наступний номер ${number}, проходьте`
-  );
-  u.lang = 'uk-UA';
+  const text = `Наступний номер ${number}, проходьте`;
+  const u = new SpeechSynthesisUtterance(text);
+
+  const voices = speechSynthesis.getVoices();
+
+  // выбираем первый доступный голос
+  const voice =
+    voices.find(v => v.lang === 'uk-UA') ||
+    voices.find(v => v.lang.startsWith('uk')) ||
+    voices.find(v => v.lang.startsWith('ru')) ||
+    voices.find(v => v.lang.startsWith('en'));
+
+  if (voice) {
+    u.voice = voice;
+  }
+
   u.rate = 0.9;
   u.pitch = 1;
 
   speechSynthesis.cancel();
   speechSynthesis.speak(u);
 }
+
 
 
   function createCard(key, data) {
