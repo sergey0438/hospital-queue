@@ -258,28 +258,7 @@ unlockBtn.addEventListener('click', () => {
     
   });
 
-  // ===== АВТОПРОКРУТКА ОЧЕРЕДИ (OLED SAFE) =====
-let scrollDirection = 1;
-
-setInterval(() => {
-  const container = document.getElementById('queueScreen');
-  if (!container) return;
-
-  // если контента меньше контейнера — не крутим
-  if (container.scrollHeight <= container.clientHeight) return;
-
-  container.scrollTop += scrollDirection;
-
-  // дошли до низа — возвращаемся наверх
-  if (container.scrollTop + container.clientHeight >= container.scrollHeight) {
-    scrollDirection = -1;
-  }
-
-  // дошли до верха — снова вниз
-  if (container.scrollTop <= 0) {
-    scrollDirection = 1;
-  }
-}, 60); // скорость (меньше = быстрее)
+  
 
 </script>
 
