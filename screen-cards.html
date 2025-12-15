@@ -35,11 +35,19 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 1rem;
+
   padding: 2rem;
   width: 100%;
   max-width: 1200px;
+
+  /* 🔥 КЛЮЧЕВОЕ */
+  height: calc(100vh - 220px); /* высота экрана минус 2 шапки */
+  overflow-y: hidden; /* ❌ ручной скролл */
+  overflow-x: hidden;
+
   margin-top: 2rem;
 }
+
 
 .patient-card {
   background-color: #d32f2f;
@@ -69,6 +77,11 @@ body {
   font-size: 1.5rem;
   font-weight: 500;
 }
+
+.queue-container::-webkit-scrollbar {
+  display: none;
+}
+
 
 @media (max-width: 768px) {
   .queue-container {
@@ -100,6 +113,7 @@ body {
 
 body {
   animation: antiSleep 30s infinite linear;
+  overflow: hidden; /* ⛔ страница больше не скроллится */
 }
 
 </style>
@@ -243,6 +257,30 @@ unlockBtn.addEventListener('click', () => {
 
     
   });
+
+  // ===== АВТОПРОКРУТКА ОЧЕРЕДИ (OLED SAFE) =====
+let scrollDirection = 1;
+
+setInterval(() => {
+  const container = document.getElementById('queueScreen');
+  if (!container) return;
+
+  // если контента меньше контейнера — не крутим
+  if (container.scrollHeight <= container.clientHeight) return;
+
+  container.scrollTop += scrollDirection;
+
+  // дошли до низа — возвращаемся наверх
+  if (container.scrollTop + container.clientHeight >= container.scrollHeight) {
+    scrollDirection = -1;
+  }
+
+  // дошли до верха — снова вниз
+  if (container.scrollTop <= 0) {
+    scrollDirection = 1;
+  }
+}, 60); // скорость (меньше = быстрее)
+
 </script>
 
 </body>
