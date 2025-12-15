@@ -40,13 +40,29 @@ body {
   width: 100%;
   max-width: 1200px;
 
-  /* 🔥 КЛЮЧЕВОЕ */
-  height: calc(100vh - 220px); /* высота экрана минус 2 шапки */
-  overflow-y: hidden; /* ❌ ручной скролл */
+  /* 🔥 ГЛАВНОЕ */
+  height: calc(100vh - 220px); /* экран минус шапки */
+  overflow-y: auto;            /* ✅ ФИЗИЧЕСКИЙ СКРОЛЛ */
   overflow-x: hidden;
 
   margin-top: 2rem;
+
+  scroll-behavior: smooth;     /* мягкий скролл */
 }
+
+.queue-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.queue-container::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.25);
+  border-radius: 4px;
+}
+
+.queue-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 
 
 .patient-card {
@@ -128,7 +144,7 @@ body {
   <div class="header">Електронна черга</div>
   <div class="header">Шановні пацієнти!
 Після зникнення поточного номера на екрані наступний номер може заходити до кабінету №3.</div>
-  <div class="queue-container" id="queueScreen"></div>
+  <div class="queue-container" id="queueScreen" tabindex="0"></div>
 
   
 
