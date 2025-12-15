@@ -123,6 +123,15 @@ body {
 
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
+  let availableVoices = [];
+
+function loadVoices() {
+  availableVoices = speechSynthesis.getVoices();
+}
+
+loadVoices();
+speechSynthesis.onvoiceschanged = loadVoices;
+
 
   const queueScreen = document.getElementById('queueScreen');
 
@@ -142,23 +151,17 @@ unlockBtn.addEventListener('click', () => {
   let lastAnnounced = null;
 
   function speakNext(number) {
-  if (!('speechSynthesis' in window)) return;
+  if (!availableVoices.length) {
+    console.warn('Голоса ещё не загружены');
+    return;
+  }
 
   const text = `Наступний номер ${number}, проходьте`;
   const u = new SpeechSynthesisUtterance(text);
 
-  const voices = speechSynthesis.getVoices();
-
-  // выбираем первый доступный голос
-  const voice =
-    voices.find(v => v.lang === 'uk-UA') ||
-    voices.find(v => v.lang.startsWith('uk')) ||
-    voices.find(v => v.lang.startsWith('ru')) ||
-    voices.find(v => v.lang.startsWith('en'));
-
-  if (voice) {
-    u.voice = voice;
-  }
+  // 🔥 ЯВНО выбираем uk-UA
+  const ukVoice = availableVoices.find(v => v.lang === 'uk-UA');
+  u.voice = ukVoice || availableVoices[0];
 
   u.rate = 0.9;
   u.pitch = 1;
@@ -166,6 +169,7 @@ unlockBtn.addEventListener('click', () => {
   speechSynthesis.cancel();
   speechSynthesis.speak(u);
 }
+
 
 
 
