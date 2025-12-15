@@ -90,6 +90,18 @@ body {
     font-size: 1.2rem;
   }
 }
+
+/* ===== ANTISLEEP ДЛЯ OLED / GOOGLE TV ===== */
+@keyframes antiSleep {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(1px, 0); }
+  100% { transform: translate(0, 0); }
+}
+
+body {
+  animation: antiSleep 30s infinite linear;
+}
+
 </style>
 </head>
 <body>
