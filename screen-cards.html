@@ -125,6 +125,20 @@ body {
   const db = firebase.database();
   let availableVoices = [];
 
+  let lastCallTs = 0;
+
+db.ref('call').on('value', snapshot => {
+  const data = snapshot.val();
+  if (!data) return;
+
+  // защита от повтора
+  if (data.ts <= lastCallTs) return;
+  lastCallTs = data.ts;
+
+  speakNext(data.number);
+});
+
+
 function loadVoices() {
   availableVoices = speechSynthesis.getVoices();
 }
@@ -148,7 +162,7 @@ unlockBtn.addEventListener('click', () => {
 
   // ✅ ВАЖНО: объявляем ДО подписки
   let currentCards = {};
-  let lastAnnounced = null;
+
 
   function speakNext(number) {
   if (!availableVoices.length) {
@@ -215,15 +229,7 @@ unlockBtn.addEventListener('click', () => {
       }
     }
 
-    // 🔊 объявляем следующий номер (минимальный waiting)
-    if (waitingNumbers.length > 0) {
-      const nextNumber = Math.min(...waitingNumbers);
-
-      if (lastAnnounced !== nextNumber) {
-        lastAnnounced = nextNumber;
-        speakNext(nextNumber);
-      }
-    }
+    
   });
 </script>
 

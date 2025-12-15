@@ -212,11 +212,39 @@
 
     // Удаление / отметка "в кабинет"
     function markIn(number) {
-  db.ref('queue/' + number).update({
-    status: 'in',
-    announced: false
+  const queueRef = db.ref('queue');
+
+  queueRef.once('value').then(snapshot => {
+    const waitingNumbers = [];
+
+    snapshot.forEach(s => {
+      const data = s.val();
+      if (data && data.status === 'waiting') {
+        waitingNumbers.push(Number(s.key));
+      }
+    });
+
+    // помечаем текущего пациента как "in"
+    db.ref('queue/' + number).update({
+      status: 'in',
+      announced: true
+    });
+
+    // определяем следующий номер
+    const nextNumber = Math.min(
+      ...waitingNumbers.filter(n => n !== number)
+    );
+
+    if (nextNumber && isFinite(nextNumber)) {
+      // 🔊 СОБЫТИЕ ВЫЗОВА
+      db.ref('call').set({
+        number: nextNumber,
+        ts: Date.now()
+      });
+    }
   });
 }
+
 
     // ------------------------------------------------
   </script>
