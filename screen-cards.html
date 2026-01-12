@@ -49,8 +49,6 @@ body {
   margin-top: 2rem;
   scroll-behavior: smooth;
 }
-
-/* скрыть scrollbar */
 .queue-container::-webkit-scrollbar { display: none; }
 
 .patient-card {
@@ -65,7 +63,6 @@ body {
   opacity: 0;
   transform: translateY(-20px);
 }
-
 .patient-card.show { opacity: 1; transform: translateY(0); }
 .patient-number { font-size: 3rem; font-weight: bold; }
 .patient-name { margin-top: 0.5rem; font-size: 1.5rem; font-weight: 500; }
@@ -83,58 +80,28 @@ body {
   50%  { transform: translate(1px, 0); }
   100% { transform: translate(0, 0); }
 }
-body {
-  animation: antiSleep 30s infinite linear;
-  overflow: hidden;
-}
+body { animation: antiSleep 30s infinite linear; overflow: hidden; }
 
 /* ===== Overlay уведомлений ===== */
-.notice-overlay {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0,0,0,0.65);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.35s ease;
-  z-index: 9998;
+.notice-overlay{
+  position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.65);
+  opacity:0; pointer-events:none; transition:opacity .35s ease;
+  z-index:9998;
 }
-.notice-overlay.show {
-  opacity: 1;
-  pointer-events: auto;
+.notice-overlay.show{ opacity:1; pointer-events:auto; }
+.notice-card{
+  max-width: 900px; margin:0 24px; padding:24px 28px;
+  background:#fff3cd; color:#111; border-radius:16px;
+  box-shadow:0 8px 30px rgba(0,0,0,.35);
+  text-align:center;
 }
-.notice-card {
-  max-width: 900px;
-  margin: 0 24px;
-  padding: 24px 28px;
-  background: #fff3cd;
-  color: #111;
-  border-radius: 16px;
-  box-shadow: 0 8px 30px rgba(0,0,0,0.35);
-  text-align: center;
-}
-.notice-title {
-  font-size: 2rem;
-  font-weight: 800;
-  margin-bottom: 12px;
-}
-.notice-text {
-  font-size: 1.5rem;
-  font-weight: 700;
-}
+.notice-title{ font-size:2rem; font-weight:800; margin-bottom:12px; }
+.notice-text{ font-size:1.5rem; font-weight:700; }
 </style>
 </head>
 
 <body>
-
-<!-- ✅ Кнопка разблокировки звука (обязательна для ТВ/браузеров) -->
-<button id="unlock"
-  class="btn btn-success btn-lg"
-  style="position:fixed;bottom:20px;left:20px;z-index:9999;">
-  🔊 Увімкнути звук
-</button>
 
 <!-- антисон видео -->
 <video
@@ -153,13 +120,11 @@ body {
 
 <div class="queue-container" id="queueScreen" tabindex="0"></div>
 
-<!-- ✅ Overlay уведомления -->
+<!-- ✅ Overlay -->
 <div id="noticeOverlay" class="notice-overlay" aria-hidden="true">
   <div class="notice-card" role="dialog" aria-live="polite" aria-modal="true">
     <div class="notice-title">Шановні пацієнти!</div>
-    <div class="notice-text">
-      Для оформлення історії хвороби ОБОВ'ЯЗКОВО необхідно отримати підпис Завідувача відділення на електронному направленні!
-    </div>
+    <div class="notice-text"></div>
   </div>
 </div>
 
@@ -168,225 +133,201 @@ body {
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
-  const firebaseConfig = {
-    apiKey: "https://kharkiv-regional-default-rtdb.europe-west1.firebasedatabase.app/",
-    authDomain: "hospital-queue.firebaseapp.com",
-    databaseURL: "https://kharkiv-regional-default-rtdb.europe-west1.firebasedatabase.app/",
-    projectId: "hospital-queue",
-    storageBucket: "hospital-queue.appspot.com",
-    messagingSenderId: "23042968926",
-    appId: "1:23042968926:web:9c75f87c5337af630653cf"
-  };
+/* ===================== FIREBASE ===================== */
+const firebaseConfig = {
+  apiKey: "https://kharkiv-regional-default-rtdb.europe-west1.firebasedatabase.app/",
+  authDomain: "hospital-queue.firebaseapp.com",
+  databaseURL: "https://kharkiv-regional-default-rtdb.europe-west1.firebasedatabase.app/",
+  projectId: "hospital-queue",
+  storageBucket: "hospital-queue.appspot.com",
+  messagingSenderId: "23042968926",
+  appId: "1:23042968926:web:9c75f87c5337af630653cf"
+};
 
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-  const queueScreen = document.getElementById('queueScreen');
-  const noticeOverlay = document.getElementById('noticeOverlay');
-  const unlockBtn = document.getElementById('unlock');
+/* ===================== UI ===================== */
+const queueScreen = document.getElementById('queueScreen');
+const noticeOverlay = document.getElementById('noticeOverlay');
+let currentCards = {};
 
-  let currentCards = {};
-  let availableVoices = [];
-  let soundUnlocked = false;
+/* ===================== QUEUE RENDER ===================== */
+function createCard(key, data) {
+  const card = document.createElement('div');
+  card.className = 'patient-card';
+  card.innerHTML = `
+    <div class="patient-number">№${key}</div>
+    <div class="patient-name">${data?.name ?? ''}</div>
+  `;
+  queueScreen.appendChild(card);
+  setTimeout(() => card.classList.add('show'), 50);
+  return card;
+}
 
-  let lastCallTs = 0;
-  let lastSilenceDate = '';
+db.ref('queue').on('value', (snapshot) => {
+  const newKeys = new Set();
 
-  // ---------- Voices ----------
-  function loadVoices() { availableVoices = speechSynthesis.getVoices(); }
-  loadVoices();
-  speechSynthesis.onvoiceschanged = loadVoices;
+  snapshot.forEach((s) => {
+    const data = s.val();
+    if (!data) return;
 
-  function getUkVoice() {
-    if (!availableVoices.length) loadVoices();
-    return availableVoices.find(v => v.lang === 'uk-UA') || availableVoices[0] || null;
-  }
-
-  // ---------- Unlock sound ----------
-  unlockBtn.addEventListener('click', () => {
-    soundUnlocked = true;
-
-    const u = new SpeechSynthesisUtterance('Звук активовано');
-    u.lang = 'uk-UA';
-    const v = getUkVoice();
-    if (v) u.voice = v;
-
-    speechSynthesis.cancel();
-    speechSynthesis.speak(u);
-
-    unlockBtn.remove();
+    if (data.status === 'waiting') {
+      newKeys.add(s.key);
+      if (!currentCards[s.key]) currentCards[s.key] = createCard(s.key, data);
+    }
   });
 
-  // ---------- Speak queue ----------
-  function speakNext(number) {
-    if (!soundUnlocked) {
-      console.log('Звук не розблоковано — натисніть кнопку "Увімкнути звук"');
-      return;
+  for (const key in currentCards) {
+    if (!newKeys.has(key)) {
+      const card = currentCards[key];
+      card.classList.remove('show');
+      setTimeout(() => card.remove(), 500);
+      delete currentCards[key];
     }
-    if (!('speechSynthesis' in window)) return;
+  }
+});
 
-    const text = `Пацієнт з номером ${number}, Ви наступний`;
+/* ===================== OVERLAY (POPUP) ===================== */
+let noticeTimer = null;
+
+function showOverlay(title, text, ms) {
+  noticeOverlay.querySelector('.notice-title').textContent = title;
+  noticeOverlay.querySelector('.notice-text').textContent = text;
+  noticeOverlay.classList.add('show');
+  noticeOverlay.setAttribute('aria-hidden', 'false');
+
+  if (noticeTimer) clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => {
+    noticeOverlay.classList.remove('show');
+    noticeOverlay.setAttribute('aria-hidden', 'true');
+  }, ms);
+}
+
+// каждые 5 минут (ВАЖНО: без cancel(), чтобы не ломать очередь)
+function showFiveMinNotice() {
+  showOverlay(
+    'Шановні пацієнти!',
+    "Для оформлення історії хвороби ОБОВ'ЯЗКОВО необхідно отримати підпис на електронному направленні!",
+    8000
+  );
+}
+
+/* ===================== VOICE (TTS) ===================== */
+let voicesLoaded = false;
+let voices = [];
+
+function loadVoices() {
+  voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+  voicesLoaded = !!voices.length;
+}
+if ('speechSynthesis' in window) {
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+function pickUkVoice() {
+  if (!voicesLoaded) loadVoices();
+  return voices.find(v => v.lang === 'uk-UA')
+      || voices.find(v => v.lang && v.lang.startsWith('uk'))
+      || voices[0]
+      || null;
+}
+
+// Без кнопок: пробуем говорить, если браузер разрешит.
+// Если ТВ блокирует — это ограничение браузера (не кода), но на некоторых ТВ работает как у тебя было.
+function safeSpeak(text, { cancelFirst = true } = {}) {
+  if (!('speechSynthesis' in window)) return;
+
+  try {
     const u = new SpeechSynthesisUtterance(text);
-
-    const ukVoice = getUkVoice();
-    if (ukVoice) u.voice = ukVoice;
-
+    const v = pickUkVoice();
+    if (v) u.voice = v;
     u.lang = 'uk-UA';
     u.rate = 0.9;
     u.pitch = 1;
 
-    speechSynthesis.cancel();
+    if (cancelFirst) speechSynthesis.cancel();
     speechSynthesis.speak(u);
+
+    // маленький retry, если внезапно не стартануло
+    setTimeout(() => {
+      if (speechSynthesis.speaking || speechSynthesis.pending) return;
+      try {
+        if (cancelFirst) speechSynthesis.cancel();
+        speechSynthesis.speak(u);
+      } catch(e) {}
+    }, 350);
+
+  } catch (e) {
+    console.warn('TTS error:', e);
   }
+}
 
-  // ---------- Firebase: call ----------
-  db.ref('call').on('value', snapshot => {
-    const data = snapshot.val();
-    if (!data) return;
+function speakQueueNumber(number) {
+  safeSpeak(`Пацієнт з номером ${number}, Ви наступний`, { cancelFirst: true });
+}
 
-    if (data.ts <= lastCallTs) return;
-    lastCallTs = data.ts;
+/* ===================== CALL EVENT FROM REGISTRAR ===================== */
+// Ожидаем, что регистратор пишет:
+// /call = { number: <nextNumber>, ts: Date.now() }
+let lastCallTs = 0;
 
-    speakNext(data.number);
-  });
+db.ref('call').on('value', snap => {
+  const data = snap.val();
+  if (!data) return;
+  if (!data.ts || !data.number) return;
 
-  // ---------- Queue cards ----------
-  function createCard(key, data) {
-    const card = document.createElement('div');
-    card.className = 'patient-card';
-    card.innerHTML = `
-      <div class="patient-number">№${key}</div>
-      <div class="patient-name">${data.name ?? ''}</div>
-    `;
-    queueScreen.appendChild(card);
-    setTimeout(() => card.classList.add('show'), 50);
-    return card;
+  if (data.ts <= lastCallTs) return;  // защита от повторов
+  lastCallTs = data.ts;
+
+  speakQueueNumber(data.number);
+});
+
+/* ===================== MINUTE OF SILENCE @ 09:00 (Kyiv) ===================== */
+let lastSilenceDate = '';
+
+function getKyivParts() {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Kyiv',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false
+  }).formatToParts(new Date());
+
+  const m = {};
+  for (const p of parts) if (p.type !== 'literal') m[p.type] = p.value;
+
+  return { dateKey: `${m.year}-${m.month}-${m.day}`, hour: m.hour, minute: m.minute };
+}
+
+function runMinuteOfSilence() {
+  showOverlay('Хвилина мовчання', 'Просимо вшанувати пам’ять загиблих.', 60000);
+  // тут cancelFirst=true — чтобы перебить возможную очередь
+  safeSpeak('Хвилина мовчання', { cancelFirst: true });
+}
+
+function checkMinuteOfSilence() {
+  const now = getKyivParts();
+  const TARGET_HOUR = '09';
+  const TARGET_MIN  = '00';
+
+  if (now.hour === TARGET_HOUR && now.minute === TARGET_MIN && now.dateKey !== lastSilenceDate) {
+    lastSilenceDate = now.dateKey;
+    runMinuteOfSilence();
   }
+}
 
-  db.ref('queue').on('value', (snapshot) => {
-    const newKeys = new Set();
+/* ===================== START TIMERS ===================== */
+window.addEventListener('load', () => {
+  // 5 минутные уведомления
+  setTimeout(showFiveMinNotice, 5000);
+  setInterval(showFiveMinNotice, 5 * 60 * 1000);
 
-    snapshot.forEach((s) => {
-      const data = s.val();
-      if (!data) return;
-
-      if (data.status === 'waiting') {
-        newKeys.add(s.key);
-        if (!currentCards[s.key]) {
-          currentCards[s.key] = createCard(s.key, data);
-        }
-      }
-    });
-
-    for (const key in currentCards) {
-      if (!newKeys.has(key)) {
-        const card = currentCards[key];
-        card.classList.remove('show');
-        setTimeout(() => card.remove(), 500);
-        delete currentCards[key];
-      }
-    }
-  });
-
-  // ---------- Overlay notices ----------
-  let noticeTimer = null;
-
-  function showOverlay(title, text, ms) {
-    // ⚠️ НЕ cancel() здесь — иначе убьём озвучку очереди
-    noticeOverlay.querySelector('.notice-title').textContent = title;
-    noticeOverlay.querySelector('.notice-text').textContent = text;
-    noticeOverlay.classList.add('show');
-    noticeOverlay.setAttribute('aria-hidden', 'false');
-
-    if (noticeTimer) clearTimeout(noticeTimer);
-    noticeTimer = setTimeout(() => {
-      noticeOverlay.classList.remove('show');
-      noticeOverlay.setAttribute('aria-hidden', 'true');
-    }, ms);
-  }
-
-  // каждые 5 минут
-  function showNotice() {
-    showOverlay(
-      'Шановні пацієнти!',
-      "Для оформлення історії хвороби ОБОВ'ЯЗКОВО необхідно отримати підпис Завідувача відділення на електронному направленні!",
-      8000
-    );
-  }
-
-  // ---------- Minute of silence schedule (Kyiv time) ----------
-  function getKyivDateTimeParts() {
-    const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Europe/Kyiv',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    }).formatToParts(new Date());
-
-    const map = {};
-    for (const p of parts) if (p.type !== 'literal') map[p.type] = p.value;
-
-    return {
-      dateKey: `${map.year}-${map.month}-${map.day}`,
-      hour: map.hour,
-      minute: map.minute
-    };
-  }
-
-  function speakMinuteOfSilence() {
-    if (!soundUnlocked) return; // ✅ только если звук разблокирован
-    if (!('speechSynthesis' in window)) return;
-
-    const text = 'Шановні пацієнти! Оголошується хвилина мовчання.';
-    const u = new SpeechSynthesisUtterance(text);
-
-    const ukVoice = getUkVoice();
-    if (ukVoice) u.voice = ukVoice;
-
-    u.lang = 'uk-UA';
-    u.rate = 0.95;
-    u.pitch = 1;
-
-    // тут можно перебить очередь (по желанию):
-    speechSynthesis.cancel();
-    speechSynthesis.speak(u);
-  }
-
-  function checkSilenceSchedule() {
-    const now = getKyivDateTimeParts();
-
-    // 👉 Поставь своё время тут (пример: 09:00)
-    const TARGET_HOUR = '20';
-    const TARGET_MIN = '55';
-
-    if (now.hour === TARGET_HOUR && now.minute === TARGET_MIN && now.dateKey !== lastSilenceDate) {
-      lastSilenceDate = now.dateKey;
-
-      showOverlay(
-        'Хвилина мовчання',
-        'Просимо вшанувати пам’ять загиблих.',
-        60000 // 60 секунд
-      );
-
-      speakMinuteOfSilence();
-    }
-  }
-
-  // ---------- Start timers ----------
-  window.addEventListener('load', () => {
-    // первое уведомление через 5 сек (чтобы не мешать запуску)
-    setTimeout(showNotice, 5000);
-
-    // каждые 5 минут
-    setInterval(showNotice, 5 * 60 * 1000);
-
-    // проверка "хвилина мовчання" каждые 20 сек
-    checkSilenceSchedule();
-    setInterval(checkSilenceSchedule, 20 * 1000);
-  });
+  // минута молчания 09:00
+  checkMinuteOfSilence();
+  setInterval(checkMinuteOfSilence, 20 * 1000);
+});
 </script>
 
 </body>
