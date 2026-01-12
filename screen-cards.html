@@ -335,7 +335,7 @@ unlockBtn.addEventListener('click', () => {
 
   function checkSilenceSchedule() {
     const now = getKyivDateTimeParts();
-    if (now.hour === '20' && now.minute === '12' && now.dateKey !== lastSilenceDate) {
+    if (now.hour === '20' && now.minute === '35' && now.dateKey !== lastSilenceDate) {
       lastSilenceDate = now.dateKey;
       showSilenceNotice();
       speakMinuteOfSilence();
