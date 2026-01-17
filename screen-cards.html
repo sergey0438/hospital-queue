@@ -309,8 +309,8 @@ function runMinuteOfSilence() {
 
 function checkMinuteOfSilence() {
   const now = getKyivParts();
-  const TARGET_HOUR = '13';
-  const TARGET_MIN  = '35';
+  const TARGET_HOUR = '23';
+  const TARGET_MIN  = '00';
 
   if (now.hour === TARGET_HOUR && now.minute === TARGET_MIN && now.dateKey !== lastSilenceDate) {
     lastSilenceDate = now.dateKey;
