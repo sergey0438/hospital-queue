@@ -6,12 +6,11 @@
   <title>Реєстратор</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-
 <body class="bg-light p-4">
   <div class="container">
     <h1 class="mb-4">Реєстратор</h1>
 
-    <!-- ✅ Баннер блокировки на время минуты молчания -->
+    <!-- Баннер минуты молчания -->
     <div id="silenceBanner" class="alert alert-warning" style="display:none; font-weight:700;">
       ⛔ Зараз триває хвилина мовчання. Дії тимчасово заблоковані.
     </div>
@@ -24,12 +23,10 @@
     <ul id="queueList" class="list-group"></ul>
   </div>
 
-  <!-- Firebase compat -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script>
-    // ---------- CONFIG ----------
     const firebaseConfig = {
       apiKey: "https://kharkiv-regional-default-rtdb.europe-west1.firebasedatabase.app/",
       authDomain: "hospital-queue.firebaseapp.com",
@@ -47,93 +44,68 @@
     // SILENCE: блокировка + звук
     // ==========================
 
-    // 1) Разблокировка озвучки браузером (Safari/TV требует 1 "user gesture")
+    // 1) Разблокировка озвучки (Safari/Chrome требуют 1 gesture)
     let audioUnlocked = false;
-
     function unlockAudioOnce() {
       if (audioUnlocked) return;
       audioUnlocked = true;
-
       try {
-        // "пустая" фраза как раз "привязывает" аудио к жесту
-        const u = new SpeechSynthesisUtterance(' ');
+        const u = new SpeechSynthesisUtterance('');
         u.lang = 'uk-UA';
-        speechSynthesis.cancel();
         speechSynthesis.speak(u);
       } catch (e) {}
-
       console.log('🔊 Audio unlocked');
     }
-
     window.addEventListener('pointerdown', unlockAudioOnce, { once: true });
     window.addEventListener('keydown', unlockAudioOnce, { once: true });
 
-    // 2) Озвучка (UA)
     function speakUA(text) {
       if (!('speechSynthesis' in window)) return;
-
-      if (!audioUnlocked) {
-        console.warn('🔇 Озвучка заблокирована браузером — кликни один раз по странице регистратора');
-        return;
-      }
-
+      if (!audioUnlocked) return; // тихо, пока не было клика
       const u = new SpeechSynthesisUtterance(text);
       u.lang = 'uk-UA';
       u.rate = 0.95;
       u.pitch = 1;
-
       speechSynthesis.cancel();
       speechSynthesis.speak(u);
     }
 
-    // 3) Блокировка UI регистратора
     function setRegistrarBlocked(isBlocked) {
       const addBtn = document.getElementById('addBtn');
-      const input  = document.getElementById('patientName');
+      const input = document.getElementById('patientName');
       const banner = document.getElementById('silenceBanner');
 
       if (addBtn) addBtn.disabled = isBlocked;
-      if (input)  input.disabled  = isBlocked;
+      if (input) input.disabled = isBlocked;
       if (banner) banner.style.display = isBlocked ? 'block' : 'none';
 
-      // блокируем все кнопки "Пацієнт вийшов"
       document.querySelectorAll('.btn-exit').forEach(btn => {
         btn.disabled = isBlocked;
         btn.classList.toggle('disabled', isBlocked);
       });
     }
 
-    // 4) Следим за system/silence (его ставит ТВ/консоль)
-    // Поддерживаем схему: { active: true, until: <ms>, startedAt: <ms> }
-    let lastSilenceStartedAtSpoken = 0;
-
-    function isSilenceActive(v) {
-      if (!v) return false;
-      const now = Date.now();
-
-      // активна если:
-      // - active === true и until в будущем
-      // - или просто until в будущем (на случай если active забыли)
-      const untilOk = (typeof v.until === 'number') ? (v.until > now) : false;
-      return (v.active === true && untilOk) || untilOk;
-    }
+    let lastSilenceTsSpoken = 0;
+    let silenceTimer = null;
 
     db.ref('system/silence').on('value', snap => {
       const v = snap.val();
+      const now = Date.now();
+      const active = !!v && (v.active === true || (typeof v.until === 'number' && v.until > now));
 
-      const active = isSilenceActive(v);
       setRegistrarBlocked(active);
 
-      if (!active) return;
-
-      // озвучить 1 раз на startedAt (или fallback на until, если startedAt нет)
-      const startedAt = (v && typeof v.startedAt === 'number') ? v.startedAt
-                        : (v && typeof v.until === 'number') ? v.until
-                        : 0;
-
-      if (startedAt && startedAt > lastSilenceStartedAtSpoken) {
-        lastSilenceStartedAtSpoken = startedAt;
+      // озвучить 1 раз на событие
+      if (active && typeof v.ts === 'number' && v.ts > lastSilenceTsSpoken) {
+        lastSilenceTsSpoken = v.ts;
         speakUA('Увага! Оголошено хвилину мовчання.');
+      }
+
+      // локальный таймер, чтобы точно убрать блокировку по until
+      if (silenceTimer) clearTimeout(silenceTimer);
+      if (active && typeof v.until === 'number') {
+        const msLeft = Math.max(0, v.until - now);
+        silenceTimer = setTimeout(() => setRegistrarBlocked(false), msLeft + 200);
       }
     });
 
@@ -150,7 +122,6 @@
 
       rootRef.child('lastReset').get().then(snapshot => {
         const lastReset = snapshot.exists() ? snapshot.val() : null;
-
         if (lastReset === today) return;
 
         const updates = {};
@@ -171,8 +142,7 @@
     // UI регистратора
     // ======================
     function initRegistrarUI() {
-      const addBtn = document.getElementById('addBtn');
-      addBtn.addEventListener('click', addPatient);
+      document.getElementById('addBtn').addEventListener('click', addPatient);
 
       db.ref('queue').on('value', snapshot => {
         const list = document.getElementById('queueList');
@@ -195,77 +165,63 @@
           }
         });
 
-        // если сейчас активна минута молчания — перезаблокируем новые кнопки
+        // если сейчас silence активен — заблокируем новые кнопки
         db.ref('system/silence').get().then(ss => {
-          setRegistrarBlocked(isSilenceActive(ss.val()));
+          const v = ss.val();
+          const now = Date.now();
+          const active = v && (v.active === true || (typeof v.until === 'number' && v.until > now));
+          setRegistrarBlocked(!!active);
         });
       });
     }
 
     function addPatient() {
-      // защита на всякий случай
-      db.ref('system/silence').get().then(ss => {
-        if (isSilenceActive(ss.val())) {
-          alert('Зараз триває хвилина мовчання. Дії тимчасово заблоковані.');
-          return;
+      const name = document.getElementById('patientName').value.trim();
+      if (!name) return alert('Введите имя пациента');
+
+      db.ref('lastNumber').transaction(last => (last || 0) + 1, (err, committed, snapshot) => {
+        if (err) {
+          console.error('Ошибка транзакции lastNumber:', err);
+          return alert('Ошибка при выдаче номера');
         }
-
-        const name = document.getElementById('patientName').value.trim();
-        if (!name) return alert('Введите имя пациента');
-
-        db.ref('lastNumber').transaction(last => (last || 0) + 1, (err, committed, snapshot) => {
-          if (err) {
-            console.error('Ошибка транзакции lastNumber:', err);
-            return alert('Ошибка при выдаче номера');
-          }
-          const number = snapshot.val();
-          db.ref('queue/' + number).set({ name, status: 'waiting' })
-            .then(() => document.getElementById('patientName').value = '')
-            .catch(e => {
-              console.error('Ошибка добавления пациента:', e);
-              alert('Ошибка записи в базу');
-            });
-        });
+        const number = snapshot.val();
+        db.ref('queue/' + number).set({ name, status: 'waiting' })
+          .then(() => document.getElementById('patientName').value = '')
+          .catch(e => {
+            console.error('Ошибка добавления пациента:', e);
+            alert('Ошибка записи в базу');
+          });
       });
     }
 
-    // ✅ ВАЖНО: при нажатии "Пацієнт вийшов" — вызываем СЛЕДУЮЩЕГО
+    // ✅ "Пацієнт вийшов" -> вызвать СЛЕДУЮЩЕГО (через call)
     function markIn(number) {
-      // защита на всякий случай
-      db.ref('system/silence').get().then(ss => {
-        if (isSilenceActive(ss.val())) {
-          alert('Зараз триває хвилина мовчання. Дії тимчасово заблоковані.');
-          return;
-        }
+      const queueRef = db.ref('queue');
 
-        const queueRef = db.ref('queue');
+      queueRef.once('value').then(snapshot => {
+        const waitingNumbers = [];
 
-        queueRef.once('value').then(snapshot => {
-          const waitingNumbers = [];
-
-          snapshot.forEach(s => {
-            const data = s.val();
-            if (data && data.status === 'waiting') {
-              waitingNumbers.push(Number(s.key));
-            }
-          });
-
-          // помечаем текущего пациента как "in"
-          db.ref('queue/' + number).update({
-            status: 'in',
-            announced: true
-          });
-
-          // следующий номер
-          const nextNumber = Math.min(...waitingNumbers.filter(n => n !== number));
-
-          if (nextNumber && isFinite(nextNumber)) {
-            db.ref('call').set({
-              number: nextNumber,
-              ts: Date.now()
-            });
+        snapshot.forEach(s => {
+          const data = s.val();
+          if (data && data.status === 'waiting') {
+            waitingNumbers.push(Number(s.key));
           }
         });
+
+        // текущий вышел
+        db.ref('queue/' + number).update({
+          status: 'in',
+          announced: true
+        });
+
+        const nextNumber = Math.min(...waitingNumbers.filter(n => n !== number));
+
+        if (nextNumber && isFinite(nextNumber)) {
+          db.ref('call').set({
+            number: nextNumber,
+            ts: Date.now()
+          });
+        }
       });
     }
   </script>

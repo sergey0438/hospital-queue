@@ -5,12 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Електронна черга</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-
 <style>
 body {
   margin: 0;
   padding: 0;
-  font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background-color: #000;
   color: #fff;
   min-height: 100vh;
@@ -37,15 +36,12 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 1rem;
   align-content: start;
-
   padding: 2rem;
   width: 100%;
   max-width: 1200px;
-
   height: calc(100vh - 220px);
   overflow-y: auto;
   overflow-x: hidden;
-
   margin-top: 2rem;
   scroll-behavior: smooth;
 }
@@ -59,22 +55,14 @@ body {
   text-align: center;
   font-size: 1.5rem;
   box-shadow: 0 0 15px rgba(255,0,0,0.7);
-  transition: transform 0.5s, opacity 0.5s, box-shadow 0.3s;
+  transition: transform 0.5s, opacity 0.5s;
   opacity: 0;
   transform: translateY(-20px);
 }
 .patient-card.show { opacity: 1; transform: translateY(0); }
 .patient-number { font-size: 3rem; font-weight: bold; }
-.patient-name { margin-top: 0.5rem; font-size: 1.5rem; font-weight: 500; }
+.patient-name { margin-top: 0.5rem; font-size: 1.2rem; font-weight: 600; }
 
-@media (max-width: 768px) {
-  .queue-container { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.5rem; padding: 1rem; }
-  .patient-card { padding: 1rem; font-size: 1.2rem; }
-  .patient-number { font-size: 2rem; }
-  .patient-name { font-size: 1.2rem; }
-}
-
-/* ===== ANTISLEEP ДЛЯ OLED / GOOGLE TV ===== */
 @keyframes antiSleep {
   0%   { transform: translate(0, 0); }
   50%  { transform: translate(1px, 0); }
@@ -82,45 +70,47 @@ body {
 }
 body { animation: antiSleep 30s infinite linear; overflow: hidden; }
 
-/* ===== Overlay уведомлений ===== */
-.notice-overlay{
-  position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-  background:rgba(0,0,0,.65);
-  opacity:0; pointer-events:none; transition:opacity .35s ease;
-  z-index:9998;
+/* Overlay */
+.notice-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.65);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+  z-index: 9998;
 }
-.notice-overlay.show{ opacity:1; pointer-events:auto; }
-.notice-card{
-  max-width: 900px; margin:0 24px; padding:24px 28px;
-  background:#fff3cd; color:#111; border-radius:16px;
-  box-shadow:0 8px 30px rgba(0,0,0,.35);
-  text-align:center;
+.notice-overlay.show { opacity: 1; pointer-events: auto; }
+.notice-card {
+  max-width: 900px;
+  margin: 0 24px;
+  padding: 24px 28px;
+  background: #fff3cd;
+  color: #111;
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+  text-align: center;
 }
-.notice-title{ font-size:2rem; font-weight:800; margin-bottom:12px; }
-.notice-text{ font-size:1.5rem; font-weight:700; }
+.notice-title { font-size: 2rem; font-weight: 800; margin-bottom: 12px; }
+.notice-text  { font-size: 1.5rem; font-weight: 700; }
 </style>
 </head>
-
 <body>
 
 <!-- антисон видео -->
-<video
-  id="antiSleepVideo"
-  autoplay
-  loop
-  muted
-  playsinline
-  preload="auto"
+<video id="antiSleepVideo" autoplay loop muted playsinline preload="auto"
   style="position: fixed; top:0; left:0; width:1px; height:1px; opacity:0; pointer-events:none; z-index:-1;">
   <source src="antisleep.mp4" type="video/mp4">
 </video>
 
 <div class="header">Електронна черга</div>
 <div class="header">Шановні пацієнти! Після зникнення поточного номера на екрані наступний номер може заходити до кабінету №3.</div>
+<div class="queue-container" id="queueScreen"></div>
 
-<div class="queue-container" id="queueScreen" tabindex="0"></div>
-
-<!-- ✅ Overlay -->
+<!-- Overlay -->
 <div id="noticeOverlay" class="notice-overlay" aria-hidden="true">
   <div class="notice-card" role="dialog" aria-live="polite" aria-modal="true">
     <div class="notice-title">Шановні пацієнти!</div>
@@ -128,12 +118,10 @@ body { animation: antiSleep 30s infinite linear; overflow: hidden; }
   </div>
 </div>
 
-<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
-/* ===================== FIREBASE ===================== */
 const firebaseConfig = {
   apiKey: "https://kharkiv-regional-default-rtdb.europe-west1.firebasedatabase.app/",
   authDomain: "hospital-queue.firebaseapp.com",
@@ -147,18 +135,57 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-/* ===================== UI ===================== */
 const queueScreen = document.getElementById('queueScreen');
 const noticeOverlay = document.getElementById('noticeOverlay');
-let currentCards = {};
 
-/* ===================== QUEUE RENDER ===================== */
+let currentCards = {};
+let availableVoices = [];
+let lastCallTs = 0;
+
+function loadVoices() { availableVoices = speechSynthesis.getVoices(); }
+loadVoices();
+speechSynthesis.onvoiceschanged = loadVoices;
+
+function getUkVoice() {
+  if (!availableVoices.length) loadVoices();
+  return availableVoices.find(v => v.lang === 'uk-UA') || availableVoices[0] || null;
+}
+
+function speakNext(number) {
+  if (!('speechSynthesis' in window)) return;
+
+  const text = `Пацієнт з номером ${number}, Ви наступний`;
+  const u = new SpeechSynthesisUtterance(text);
+
+  const v = getUkVoice();
+  if (v) u.voice = v;
+
+  u.lang = 'uk-UA';
+  u.rate = 0.9;
+  u.pitch = 1;
+
+  speechSynthesis.cancel();
+  speechSynthesis.speak(u);
+}
+
+// слушаем call (его пишет регистратор)
+db.ref('call').on('value', snap => {
+  const data = snap.val();
+  if (!data) return;
+
+  if (typeof data.ts === 'number' && data.ts <= lastCallTs) return;
+  if (typeof data.ts === 'number') lastCallTs = data.ts;
+
+  speakNext(data.number);
+});
+
+// карточки очереди
 function createCard(key, data) {
   const card = document.createElement('div');
   card.className = 'patient-card';
   card.innerHTML = `
     <div class="patient-number">№${key}</div>
-    <div class="patient-name">${data?.name ?? ''}</div>
+    <div class="patient-name">${data.name ?? ''}</div>
   `;
   queueScreen.appendChild(card);
   setTimeout(() => card.classList.add('show'), 50);
@@ -168,13 +195,15 @@ function createCard(key, data) {
 db.ref('queue').on('value', (snapshot) => {
   const newKeys = new Set();
 
-  snapshot.forEach((s) => {
+  snapshot.forEach(s => {
     const data = s.val();
     if (!data) return;
 
     if (data.status === 'waiting') {
       newKeys.add(s.key);
-      if (!currentCards[s.key]) currentCards[s.key] = createCard(s.key, data);
+      if (!currentCards[s.key]) {
+        currentCards[s.key] = createCard(s.key, data);
+      }
     }
   });
 
@@ -188,110 +217,32 @@ db.ref('queue').on('value', (snapshot) => {
   }
 });
 
-/* ===================== OVERLAY (POPUP) ===================== */
-let noticeTimer = null;
-
+// Overlay helpers
+let overlayTimer = null;
 function showOverlay(title, text, ms) {
   noticeOverlay.querySelector('.notice-title').textContent = title;
   noticeOverlay.querySelector('.notice-text').textContent = text;
   noticeOverlay.classList.add('show');
   noticeOverlay.setAttribute('aria-hidden', 'false');
 
-  if (noticeTimer) clearTimeout(noticeTimer);
-  noticeTimer = setTimeout(() => {
+  if (overlayTimer) clearTimeout(overlayTimer);
+  overlayTimer = setTimeout(() => {
     noticeOverlay.classList.remove('show');
     noticeOverlay.setAttribute('aria-hidden', 'true');
   }, ms);
 }
 
-// каждые 5 минут (ВАЖНО: без cancel(), чтобы не ломать очередь)
-function showFiveMinNotice() {
-  showOverlay(
-    'Шановні пацієнти!',
-    "Для оформлення стаціонарної карти ОБОВ'ЯЗКОВО необхідно отримати підпис Завідувача відділення на електронному направленні!",
-    8000
-  );
-}
-
-/* ===================== VOICE (TTS) ===================== */
-let voicesLoaded = false;
-let voices = [];
-
-function loadVoices() {
-  voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
-  voicesLoaded = !!voices.length;
-}
-if ('speechSynthesis' in window) {
-  loadVoices();
-  speechSynthesis.onvoiceschanged = loadVoices;
-}
-
-function pickUkVoice() {
-  if (!voicesLoaded) loadVoices();
-  return voices.find(v => v.lang === 'uk-UA')
-      || voices.find(v => v.lang && v.lang.startsWith('uk'))
-      || voices[0]
-      || null;
-}
-
-// Без кнопок: пробуем говорить, если браузер разрешит.
-// Если ТВ блокирует — это ограничение браузера (не кода), но на некоторых ТВ работает как у тебя было.
-function safeSpeak(text, { cancelFirst = true } = {}) {
-  if (!('speechSynthesis' in window)) return;
-
-  try {
-    const u = new SpeechSynthesisUtterance(text);
-    const v = pickUkVoice();
-    if (v) u.voice = v;
-    u.lang = 'uk-UA';
-    u.rate = 0.9;
-    u.pitch = 1;
-
-    if (cancelFirst) speechSynthesis.cancel();
-    speechSynthesis.speak(u);
-
-    // маленький retry, если внезапно не стартануло
-    setTimeout(() => {
-      if (speechSynthesis.speaking || speechSynthesis.pending) return;
-      try {
-        if (cancelFirst) speechSynthesis.cancel();
-        speechSynthesis.speak(u);
-      } catch(e) {}
-    }, 350);
-
-  } catch (e) {
-    console.warn('TTS error:', e);
-  }
-}
-
-function speakQueueNumber(number) {
-  safeSpeak(`Пацієнт з номером ${number}, Ви наступний`, { cancelFirst: true });
-}
-
-/* ===================== CALL EVENT FROM REGISTRAR ===================== */
-// Ожидаем, что регистратор пишет:
-// /call = { number: <nextNumber>, ts: Date.now() }
-let lastCallTs = 0;
-
-db.ref('call').on('value', snap => {
-  const data = snap.val();
-  if (!data) return;
-  if (!data.ts || !data.number) return;
-
-  if (data.ts <= lastCallTs) return;  // защита от повторов
-  lastCallTs = data.ts;
-
-  speakQueueNumber(data.number);
-});
-
-/* ===================== MINUTE OF SILENCE @ 09:00 (Kyiv) ===================== */
-let lastSilenceDate = '';
-
+// ============================
+// Минутa молчания (09:00 Kyiv)
+// ============================
 function getKyivParts() {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Kyiv',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
     hour12: false
   }).formatToParts(new Date());
 
@@ -301,34 +252,67 @@ function getKyivParts() {
   return { dateKey: `${m.year}-${m.month}-${m.day}`, hour: m.hour, minute: m.minute };
 }
 
-function runMinuteOfSilence() {
-  showOverlay('Хвилина мовчання', 'Просимо вшанувати пам’ять загиблих.', 60000);
-  // тут cancelFirst=true — чтобы перебить возможную очередь
-  safeSpeak('Хвилина мовчання', { cancelFirst: true });
+let lastSilenceDate = '';
+
+function startSilenceOneMinute() {
+  const now = Date.now();
+  return db.ref('system/silence').set({
+    active: true,
+    startedAt: now,
+    until: now + 60 * 1000,
+    ts: now
+  });
 }
 
-function checkMinuteOfSilence() {
-  const now = getKyivParts();
-  const TARGET_HOUR = '23';
+function checkSilenceSchedule() {
+  const t = getKyivParts();
+
+  // ✅ РЕДАКТИРУЕШЬ ВРЕМЯ ТУТ:
+  const TARGET_HOUR = '09';
   const TARGET_MIN  = '00';
 
-  if (now.hour === TARGET_HOUR && now.minute === TARGET_MIN && now.dateKey !== lastSilenceDate) {
-    lastSilenceDate = now.dateKey;
-    runMinuteOfSilence();
+  if (t.hour === TARGET_HOUR && t.minute === TARGET_MIN && t.dateKey !== lastSilenceDate) {
+    lastSilenceDate = t.dateKey;
+    startSilenceOneMinute();
   }
 }
+setInterval(checkSilenceSchedule, 20 * 1000);
+checkSilenceSchedule();
 
-/* ===================== START TIMERS ===================== */
-window.addEventListener('load', () => {
-  // 5 минутные уведомления
-  setTimeout(showFiveMinNotice, 5000);
-  setInterval(showFiveMinNotice, 5 * 60 * 1000);
+// ТВ слушает silence и показывает overlay (и может говорить)
+let silenceTimer = null;
+db.ref('system/silence').on('value', snap => {
+  const v = snap.val();
+  const now = Date.now();
+  const active = !!v && (v.active === true || (typeof v.until === 'number' && v.until > now));
 
-  // минута молчания 09:00
-  checkMinuteOfSilence();
-  setInterval(checkMinuteOfSilence, 20 * 1000);
+  if (active) {
+    showOverlay('Хвилина мовчання', 'Просимо вшанувати пам’ять загиблих.', 60000);
+    // можно озвучить:
+    // speakNext(''); // не нужно
+  } else {
+    noticeOverlay.classList.remove('show');
+    noticeOverlay.setAttribute('aria-hidden', 'true');
+  }
+
+  if (silenceTimer) clearTimeout(silenceTimer);
+  if (active && typeof v.until === 'number') {
+    const msLeft = Math.max(0, v.until - now);
+    silenceTimer = setTimeout(() => {
+      noticeOverlay.classList.remove('show');
+      noticeOverlay.setAttribute('aria-hidden', 'true');
+    }, msLeft + 200);
+  }
 });
-</script>
 
+// Опционально: чистим active=false когда истекло
+function cleanupSilenceIfExpired(v) {
+  const now = Date.now();
+  if (v && typeof v.until === 'number' && v.until <= now && v.active === true) {
+    db.ref('system/silence/active').set(false);
+  }
+}
+db.ref('system/silence').on('value', snap => cleanupSilenceIfExpired(snap.val()));
+</script>
 </body>
 </html>
