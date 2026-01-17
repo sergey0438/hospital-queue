@@ -268,8 +268,8 @@ function checkSilenceSchedule() {
   const t = getKyivParts();
 
   // ✅ РЕДАКТИРУЕШЬ ВРЕМЯ ТУТ:
-  const TARGET_HOUR = '23';
-  const TARGET_MIN  = '08';
+  const TARGET_HOUR = '09';
+  const TARGET_MIN  = '00';
 
   if (t.hour === TARGET_HOUR && t.minute === TARGET_MIN && t.dateKey !== lastSilenceDate) {
     lastSilenceDate = t.dateKey;
