@@ -154,7 +154,7 @@ function getUkVoice() {
 function speakNext(number) {
   if (!('speechSynthesis' in window)) return;
 
-  const text = `Пацієнт з номером ${number}, Ви наступний`;
+  const text = `Пацієнт з номером ${number}, Ви наступний. Будь ласка, проходьте.`;
   const u = new SpeechSynthesisUtterance(text);
 
   const v = getUkVoice();
