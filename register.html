@@ -49,23 +49,48 @@
     function unlockAudioOnce() {
       if (audioUnlocked) return;
       audioUnlocked = true;
+
       try {
-        const u = new SpeechSynthesisUtterance('');
+        // "пустая" фраза чтобы снять блокировку
+        const u = new SpeechSynthesisUtterance(' ');
         u.lang = 'uk-UA';
         speechSynthesis.speak(u);
       } catch (e) {}
+
       console.log('🔊 Audio unlocked');
     }
     window.addEventListener('pointerdown', unlockAudioOnce, { once: true });
     window.addEventListener('keydown', unlockAudioOnce, { once: true });
 
+    // 2) ✅ ЯВНАЯ загрузка/выбор украинского голоса (исправляет "русское произношение")
+    let voices = [];
+    function loadVoices() {
+      voices = speechSynthesis.getVoices() || [];
+      // можно раскомментировать для отладки:
+      // console.log('voices:', voices.map(v => `${v.lang} — ${v.name}`));
+    }
+    loadVoices();
+    speechSynthesis.onvoiceschanged = loadVoices;
+
+    function getUkVoice() {
+      // uk-UA или любое uk*
+      return voices.find(v => v.lang === 'uk-UA' || (v.lang || '').toLowerCase().startsWith('uk')) || null;
+    }
+
     function speakUA(text) {
       if (!('speechSynthesis' in window)) return;
       if (!audioUnlocked) return; // тихо, пока не было клика
+
       const u = new SpeechSynthesisUtterance(text);
+
+      // ✅ ключевое: назначаем голос
+      const uk = getUkVoice();
+      if (uk) u.voice = uk;
+
       u.lang = 'uk-UA';
       u.rate = 0.95;
       u.pitch = 1;
+
       speechSynthesis.cancel();
       speechSynthesis.speak(u);
     }
@@ -95,9 +120,14 @@
 
       setRegistrarBlocked(active);
 
+      // ✅ FIX: вместо v.ts используем startedAt (или fallback)
+      const eventTs = (v && typeof v.startedAt === 'number') ? v.startedAt
+                    : (v && typeof v.ts === 'number') ? v.ts
+                    : 0;
+
       // озвучить 1 раз на событие
-      if (active && typeof v.ts === 'number' && v.ts > lastSilenceTsSpoken) {
-        lastSilenceTsSpoken = v.ts;
+      if (active && eventTs > lastSilenceTsSpoken) {
+        lastSilenceTsSpoken = eventTs;
         speakUA('Увага! Оголошено хвилину мовчання.');
       }
 
