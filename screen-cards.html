@@ -146,7 +146,6 @@ let lastCallTs = 0;
 // ✅ AUTO AUDIO UNLOCK (без клика) — Smart TV friendly
 // ==================================================
 let audioUnlocked = false;
-
 (function autoUnlockAudio() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -156,7 +155,6 @@ let audioUnlocked = false;
     }
     const ctx = new AudioCtx();
 
-    // бесшумный буфер ~1мс
     const buffer = ctx.createBuffer(1, 1, 22050);
     const source = ctx.createBufferSource();
     source.buffer = buffer;
@@ -168,7 +166,6 @@ let audioUnlocked = false;
       console.log('🔓 Audio auto-unlocked (state=running)');
     }
 
-    // fallback: попытаться resume
     setTimeout(() => {
       if (!audioUnlocked && ctx.state === 'suspended') {
         ctx.resume().then(() => {
@@ -195,7 +192,6 @@ if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = loadVoices;
 
 function getUkVoice() {
   if (!availableVoices.length) loadVoices();
-  // uk-UA или любое uk*
   return (
     availableVoices.find(v => v.lang === 'uk-UA') ||
     availableVoices.find(v => (v.lang || '').toLowerCase().startsWith('uk')) ||
@@ -210,7 +206,6 @@ function getUkVoice() {
 function speakNext(number) {
   if (!('speechSynthesis' in window)) return;
 
-  // ✅ важное: не говорим пока не unlocked
   if (!audioUnlocked) {
     console.warn('🔇 Audio still locked, skip speak');
     return;
@@ -298,9 +293,10 @@ function showOverlay(title, text, ms) {
   }, ms);
 }
 
-// ============================
-// Минутa молчания (09:00 Kyiv)
-// ============================
+
+// =======================================================
+// ✅ Минутa молчания (Kyiv) — FIX: окно + localStorage
+// =======================================================
 function getKyivParts() {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Kyiv',
@@ -309,19 +305,30 @@ function getKyivParts() {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
     hour12: false
   }).formatToParts(new Date());
 
   const m = {};
   for (const p of parts) if (p.type !== 'literal') m[p.type] = p.value;
 
-  return { dateKey: `${m.year}-${m.month}-${m.day}`, hour: m.hour, minute: m.minute };
+  return { dateKey: `${m.year}-${m.month}-${m.day}`, hour: m.hour, minute: m.minute, second: m.second };
 }
 
-let lastSilenceDate = '';
+const SILENCE_LS_KEY = 'silence_last_date';
+let lastSilenceDate = localStorage.getItem(SILENCE_LS_KEY) || '';
 
-function startSilenceOneMinute() {
+async function startSilenceOneMinute() {
   const now = Date.now();
+
+  // если уже активна — не перезаписываем
+  const cur = (await db.ref('system/silence').get()).val();
+  if (cur && (cur.active === true || (typeof cur.until === 'number' && cur.until > now))) {
+    console.log('🟡 Silence already active in DB, skip set');
+    return;
+  }
+
+  console.log('✅ start silence -> Firebase');
   return db.ref('system/silence').set({
     active: true,
     startedAt: now,
@@ -330,27 +337,51 @@ function startSilenceOneMinute() {
   });
 }
 
-function checkSilenceSchedule() {
+async function checkSilenceSchedule() {
   const t = getKyivParts();
 
   // ✅ РЕДАКТИРУЕШЬ ВРЕМЯ ТУТ:
   const TARGET_HOUR = '09';
   const TARGET_MIN  = '00';
 
-  if (t.hour === TARGET_HOUR && t.minute === TARGET_MIN && t.dateKey !== lastSilenceDate) {
-    lastSilenceDate = t.dateKey;
-    startSilenceOneMinute();
+  // окно: 09:00:00–09:01:30
+  const inWindow =
+    t.hour === TARGET_HOUR &&
+    (t.minute === TARGET_MIN || t.minute === '01') &&
+    (t.minute === TARGET_MIN || (t.minute === '01' && Number(t.second) <= 30));
+
+  if (!inWindow) return;
+  if (t.dateKey === lastSilenceDate) return;
+
+  lastSilenceDate = t.dateKey;
+  localStorage.setItem(SILENCE_LS_KEY, lastSilenceDate);
+
+  try {
+    await startSilenceOneMinute();
+  } catch (e) {
+    console.warn('❌ startSilenceOneMinute error:', e);
+    lastSilenceDate = '';
+    localStorage.removeItem(SILENCE_LS_KEY);
   }
 }
-setInterval(checkSilenceSchedule, 20 * 1000);
+
+setInterval(checkSilenceSchedule, 10 * 1000);
 checkSilenceSchedule();
 
-// ТВ слушает silence и показывает overlay
+
+// =======================================================
+// ✅ Синхрон: слушаем system/silence (overlay + auto-off)
+// =======================================================
 let silenceTimer = null;
+
 db.ref('system/silence').on('value', snap => {
   const v = snap.val();
   const now = Date.now();
-  const active = !!v && (v.active === true || (typeof v.until === 'number' && v.until > now));
+
+  const active = !!v && (
+    v.active === true ||
+    (typeof v.until === 'number' && v.until > now)
+  );
 
   if (active) {
     showOverlay('Хвилина мовчання', 'Просимо вшанувати пам’ять загиблих.', 60000);
@@ -360,23 +391,18 @@ db.ref('system/silence').on('value', snap => {
   }
 
   if (silenceTimer) clearTimeout(silenceTimer);
+
   if (active && typeof v.until === 'number') {
     const msLeft = Math.max(0, v.until - now);
     silenceTimer = setTimeout(() => {
       noticeOverlay.classList.remove('show');
       noticeOverlay.setAttribute('aria-hidden', 'true');
+
+      // ✅ опционально: сброс active=false после окончания
+      db.ref('system/silence/active').set(false).catch(()=>{});
     }, msLeft + 200);
   }
 });
-
-// Опционально: чистим active=false когда истекло
-function cleanupSilenceIfExpired(v) {
-  const now = Date.now();
-  if (v && typeof v.until === 'number' && v.until <= now && v.active === true) {
-    db.ref('system/silence/active').set(false);
-  }
-}
-db.ref('system/silence').on('value', snap => cleanupSilenceIfExpired(snap.val()));
 </script>
 </body>
 </html>
