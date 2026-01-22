@@ -142,48 +142,10 @@ let currentCards = {};
 let availableVoices = [];
 let lastCallTs = 0;
 
-// ==================================================
-// ✅ AUTO AUDIO UNLOCK (без клика) — Smart TV friendly
-// ==================================================
-let audioUnlocked = false;
-(function autoUnlockAudio() {
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) {
-      console.warn('AudioContext not available');
-      return;
-    }
-    const ctx = new AudioCtx();
-
-    const buffer = ctx.createBuffer(1, 1, 22050);
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(ctx.destination);
-    source.start(0);
-
-    if (ctx.state === 'running') {
-      audioUnlocked = true;
-      console.log('🔓 Audio auto-unlocked (state=running)');
-    }
-
-    setTimeout(() => {
-      if (!audioUnlocked && ctx.state === 'suspended') {
-        ctx.resume().then(() => {
-          audioUnlocked = true;
-          console.log('🔓 Audio resumed (fallback)');
-        }).catch(e => console.warn('Audio resume failed:', e));
-      }
-    }, 500);
-
-  } catch (e) {
-    console.warn('Audio unlock error:', e);
-  }
-})();
-
-// ===================
-// Voices (TTS)
-// ===================
-function loadVoices() { 
+/* ===================
+   Voices (TTS)
+=================== */
+function loadVoices() {
   try { availableVoices = speechSynthesis.getVoices() || []; }
   catch(e) { availableVoices = []; }
 }
@@ -200,16 +162,11 @@ function getUkVoice() {
   );
 }
 
-// ===================
-// Speak
-// ===================
+/* ===================
+   Speak (как было: без AudioContext и без блокировок)
+=================== */
 function speakNext(number) {
   if (!('speechSynthesis' in window)) return;
-
-  if (!audioUnlocked) {
-    console.warn('🔇 Audio still locked, skip speak');
-    return;
-  }
 
   const text = `Пацієнт з номером ${number}, Ви наступний. Будь ласка, проходьте.`;
   const u = new SpeechSynthesisUtterance(text);
@@ -225,11 +182,13 @@ function speakNext(number) {
     speechSynthesis.cancel();
     speechSynthesis.speak(u);
   } catch(e) {
-    console.warn('speak error:', e);
+    console.warn('speechSynthesis error:', e);
   }
 }
 
-// слушаем call (его пишет регистратор)
+/* ===================
+   call (его пишет регистратор)
+=================== */
 db.ref('call').on('value', snap => {
   const data = snap.val();
   if (!data) return;
@@ -240,7 +199,9 @@ db.ref('call').on('value', snap => {
   speakNext(data.number);
 });
 
-// карточки очереди
+/* ===================
+   Карточки очереди
+=================== */
 function createCard(key, data) {
   const card = document.createElement('div');
   card.className = 'patient-card';
@@ -278,7 +239,9 @@ db.ref('queue').on('value', (snapshot) => {
   }
 });
 
-// Overlay helpers
+/* ===================
+   Overlay helpers
+=================== */
 let overlayTimer = null;
 function showOverlay(title, text, ms) {
   noticeOverlay.querySelector('.notice-title').textContent = title;
@@ -293,10 +256,10 @@ function showOverlay(title, text, ms) {
   }, ms);
 }
 
-
-// =======================================================
-// ✅ Минутa молчания (Kyiv) — FIX: окно + localStorage
-// =======================================================
+/* ============================
+   Минута молчания (09:00 Kyiv)
+   СИНХРОН через system/silence
+============================ */
 function getKyivParts() {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Kyiv',
@@ -305,30 +268,19 @@ function getKyivParts() {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
     hour12: false
   }).formatToParts(new Date());
 
   const m = {};
   for (const p of parts) if (p.type !== 'literal') m[p.type] = p.value;
 
-  return { dateKey: `${m.year}-${m.month}-${m.day}`, hour: m.hour, minute: m.minute, second: m.second };
+  return { dateKey: `${m.year}-${m.month}-${m.day}`, hour: m.hour, minute: m.minute };
 }
 
-const SILENCE_LS_KEY = 'silence_last_date';
-let lastSilenceDate = localStorage.getItem(SILENCE_LS_KEY) || '';
+let lastSilenceDate = '';
 
-async function startSilenceOneMinute() {
+function startSilenceOneMinute() {
   const now = Date.now();
-
-  // если уже активна — не перезаписываем
-  const cur = (await db.ref('system/silence').get()).val();
-  if (cur && (cur.active === true || (typeof cur.until === 'number' && cur.until > now))) {
-    console.log('🟡 Silence already active in DB, skip set');
-    return;
-  }
-
-  console.log('✅ start silence -> Firebase');
   return db.ref('system/silence').set({
     active: true,
     startedAt: now,
@@ -337,51 +289,30 @@ async function startSilenceOneMinute() {
   });
 }
 
-async function checkSilenceSchedule() {
+function checkSilenceSchedule() {
   const t = getKyivParts();
 
   // ✅ РЕДАКТИРУЕШЬ ВРЕМЯ ТУТ:
   const TARGET_HOUR = '09';
   const TARGET_MIN  = '00';
 
-  // окно: 09:00:00–09:01:30
-  const inWindow =
-    t.hour === TARGET_HOUR &&
-    (t.minute === TARGET_MIN || t.minute === '01') &&
-    (t.minute === TARGET_MIN || (t.minute === '01' && Number(t.second) <= 30));
-
-  if (!inWindow) return;
-  if (t.dateKey === lastSilenceDate) return;
-
-  lastSilenceDate = t.dateKey;
-  localStorage.setItem(SILENCE_LS_KEY, lastSilenceDate);
-
-  try {
-    await startSilenceOneMinute();
-  } catch (e) {
-    console.warn('❌ startSilenceOneMinute error:', e);
-    lastSilenceDate = '';
-    localStorage.removeItem(SILENCE_LS_KEY);
+  if (t.hour === TARGET_HOUR && t.minute === TARGET_MIN && t.dateKey !== lastSilenceDate) {
+    lastSilenceDate = t.dateKey;
+    startSilenceOneMinute();
   }
 }
-
-setInterval(checkSilenceSchedule, 10 * 1000);
+setInterval(checkSilenceSchedule, 20 * 1000);
 checkSilenceSchedule();
 
-
-// =======================================================
-// ✅ Синхрон: слушаем system/silence (overlay + auto-off)
-// =======================================================
+/* ===================
+   Слушаем system/silence и показываем overlay
+=================== */
 let silenceTimer = null;
 
 db.ref('system/silence').on('value', snap => {
   const v = snap.val();
   const now = Date.now();
-
-  const active = !!v && (
-    v.active === true ||
-    (typeof v.until === 'number' && v.until > now)
-  );
+  const active = !!v && (v.active === true || (typeof v.until === 'number' && v.until > now));
 
   if (active) {
     showOverlay('Хвилина мовчання', 'Просимо вшанувати пам’ять загиблих.', 60000);
@@ -391,18 +322,23 @@ db.ref('system/silence').on('value', snap => {
   }
 
   if (silenceTimer) clearTimeout(silenceTimer);
-
   if (active && typeof v.until === 'number') {
     const msLeft = Math.max(0, v.until - now);
     silenceTimer = setTimeout(() => {
       noticeOverlay.classList.remove('show');
       noticeOverlay.setAttribute('aria-hidden', 'true');
-
-      // ✅ опционально: сброс active=false после окончания
-      db.ref('system/silence/active').set(false).catch(()=>{});
     }, msLeft + 200);
   }
 });
+
+// ✅ Чистим active=false когда истекло (один раз)
+function cleanupSilenceIfExpired(v) {
+  const now = Date.now();
+  if (v && typeof v.until === 'number' && v.until <= now && v.active === true) {
+    db.ref('system/silence/active').set(false);
+  }
+}
+db.ref('system/silence').on('value', snap => cleanupSilenceIfExpired(snap.val()));
 </script>
 </body>
 </html>
