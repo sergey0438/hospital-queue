@@ -139,69 +139,73 @@ const queueScreen = document.getElementById('queueScreen');
 const noticeOverlay = document.getElementById('noticeOverlay');
 
 let currentCards = {};
-let availableVoices = [];
 let lastCallTs = 0;
 
-/* ===================
-   Voices (TTS)
-=================== */
+// =====================================
+// ✅ TTS: правильный украинский голос
+// (без AudioContext, без "unlock" флага)
+// =====================================
+let voices = [];
 function loadVoices() {
-  try { availableVoices = speechSynthesis.getVoices() || []; }
-  catch(e) { availableVoices = []; }
+  try { voices = speechSynthesis.getVoices() || []; } catch(e) { voices = []; }
 }
-loadVoices();
-if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = loadVoices;
+if ("speechSynthesis" in window) {
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;
+}
 
 function getUkVoice() {
-  if (!availableVoices.length) loadVoices();
   return (
-    availableVoices.find(v => v.lang === 'uk-UA') ||
-    availableVoices.find(v => (v.lang || '').toLowerCase().startsWith('uk')) ||
-    availableVoices[0] ||
+    voices.find(v => v.lang === "uk-UA") ||
+    voices.find(v => (v.lang || "").toLowerCase().startsWith("uk")) ||
     null
   );
 }
 
-/* ===================
-   Speak (как было: без AudioContext и без блокировок)
-=================== */
-function speakNext(number) {
-  if (!('speechSynthesis' in window)) return;
+function speakUA(text) {
+  if (!("speechSynthesis" in window)) return;
 
-  const text = `Пацієнт з номером ${number}, Ви наступний. Будь ласка, проходьте.`;
+  if (!voices.length) loadVoices();
+
   const u = new SpeechSynthesisUtterance(text);
+  u.lang = "uk-UA";
 
-  const v = getUkVoice();
-  if (v) u.voice = v;
+  const uk = getUkVoice();
+  if (uk) u.voice = uk;
 
-  u.lang = 'uk-UA';
   u.rate = 0.9;
   u.pitch = 1;
 
   try {
     speechSynthesis.cancel();
     speechSynthesis.speak(u);
-  } catch(e) {
-    console.warn('speechSynthesis error:', e);
+  } catch (e) {
+    console.warn("speakUA error:", e);
   }
 }
 
-/* ===================
-   call (его пишет регистратор)
-=================== */
+function speakNext(number) {
+  const text = `Пацієнт з номером ${number}, Ви наступний. Будь ласка, проходьте.`;
+  speakUA(text);
+}
+
+// ======================
+// call -> озвучка номера
+// ======================
 db.ref('call').on('value', snap => {
   const data = snap.val();
   if (!data) return;
 
+  // защита от повтора
   if (typeof data.ts === 'number' && data.ts <= lastCallTs) return;
   if (typeof data.ts === 'number') lastCallTs = data.ts;
 
   speakNext(data.number);
 });
 
-/* ===================
-   Карточки очереди
-=================== */
+// ======================
+// карточки очереди
+// ======================
 function createCard(key, data) {
   const card = document.createElement('div');
   card.className = 'patient-card';
@@ -239,13 +243,14 @@ db.ref('queue').on('value', (snapshot) => {
   }
 });
 
-/* ===================
-   Overlay helpers
-=================== */
+// ======================
+// Overlay helpers
+// ======================
 let overlayTimer = null;
 function showOverlay(title, text, ms) {
   noticeOverlay.querySelector('.notice-title').textContent = title;
   noticeOverlay.querySelector('.notice-text').textContent = text;
+
   noticeOverlay.classList.add('show');
   noticeOverlay.setAttribute('aria-hidden', 'false');
 
@@ -256,10 +261,11 @@ function showOverlay(title, text, ms) {
   }, ms);
 }
 
-/* ============================
-   Минута молчания (09:00 Kyiv)
-   СИНХРОН через system/silence
-============================ */
+// ==================================
+// Минута молчания: синхрон через DB
+// ==================================
+
+// 1) План: в 09:00 Kyiv ставим system/silence
 function getKyivParts() {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Kyiv',
@@ -284,15 +290,14 @@ function startSilenceOneMinute() {
   return db.ref('system/silence').set({
     active: true,
     startedAt: now,
-    until: now + 60 * 1000,
-    ts: now
+    until: now + 60 * 1000
   });
 }
 
 function checkSilenceSchedule() {
   const t = getKyivParts();
 
-  // ✅ РЕДАКТИРУЕШЬ ВРЕМЯ ТУТ:
+  // ✅ ВРЕМЯ МИНУТЫ МОЛЧАНИЯ РЕДАКТИРУЕШЬ ТУТ:
   const TARGET_HOUR = '09';
   const TARGET_MIN  = '00';
 
@@ -304,9 +309,8 @@ function checkSilenceSchedule() {
 setInterval(checkSilenceSchedule, 20 * 1000);
 checkSilenceSchedule();
 
-/* ===================
-   Слушаем system/silence и показываем overlay
-=================== */
+// 2) ТВ слушает system/silence и показывает оверлей + озвучивает 1 раз
+let lastSilenceSpokenAt = 0;
 let silenceTimer = null;
 
 db.ref('system/silence').on('value', snap => {
@@ -316,6 +320,12 @@ db.ref('system/silence').on('value', snap => {
 
   if (active) {
     showOverlay('Хвилина мовчання', 'Просимо вшанувати пам’ять загиблих.', 60000);
+
+    const startedAt = (v && typeof v.startedAt === 'number') ? v.startedAt : 0;
+    if (startedAt && startedAt > lastSilenceSpokenAt) {
+      lastSilenceSpokenAt = startedAt;
+      speakUA('Увага! Оголошено хвилину мовчання.');
+    }
   } else {
     noticeOverlay.classList.remove('show');
     noticeOverlay.setAttribute('aria-hidden', 'true');
@@ -327,18 +337,11 @@ db.ref('system/silence').on('value', snap => {
     silenceTimer = setTimeout(() => {
       noticeOverlay.classList.remove('show');
       noticeOverlay.setAttribute('aria-hidden', 'true');
+      // опционально: снимем active, чтобы все клиенты увидели "выключено"
+      db.ref('system/silence/active').set(false);
     }, msLeft + 200);
   }
 });
-
-// ✅ Чистим active=false когда истекло (один раз)
-function cleanupSilenceIfExpired(v) {
-  const now = Date.now();
-  if (v && typeof v.until === 'number' && v.until <= now && v.active === true) {
-    db.ref('system/silence/active').set(false);
-  }
-}
-db.ref('system/silence').on('value', snap => cleanupSilenceIfExpired(snap.val()));
 </script>
 </body>
 </html>
