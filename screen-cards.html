@@ -142,17 +142,79 @@ let currentCards = {};
 let availableVoices = [];
 let lastCallTs = 0;
 
-function loadVoices() { availableVoices = speechSynthesis.getVoices(); }
+// ==================================================
+// ✅ AUTO AUDIO UNLOCK (без клика) — Smart TV friendly
+// ==================================================
+let audioUnlocked = false;
+
+(function autoUnlockAudio() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) {
+      console.warn('AudioContext not available');
+      return;
+    }
+    const ctx = new AudioCtx();
+
+    // бесшумный буфер ~1мс
+    const buffer = ctx.createBuffer(1, 1, 22050);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
+
+    if (ctx.state === 'running') {
+      audioUnlocked = true;
+      console.log('🔓 Audio auto-unlocked (state=running)');
+    }
+
+    // fallback: попытаться resume
+    setTimeout(() => {
+      if (!audioUnlocked && ctx.state === 'suspended') {
+        ctx.resume().then(() => {
+          audioUnlocked = true;
+          console.log('🔓 Audio resumed (fallback)');
+        }).catch(e => console.warn('Audio resume failed:', e));
+      }
+    }, 500);
+
+  } catch (e) {
+    console.warn('Audio unlock error:', e);
+  }
+})();
+
+// ===================
+// Voices (TTS)
+// ===================
+function loadVoices() { 
+  try { availableVoices = speechSynthesis.getVoices() || []; }
+  catch(e) { availableVoices = []; }
+}
 loadVoices();
-speechSynthesis.onvoiceschanged = loadVoices;
+if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = loadVoices;
 
 function getUkVoice() {
   if (!availableVoices.length) loadVoices();
-  return availableVoices.find(v => v.lang === 'uk-UA') || availableVoices[0] || null;
+  // uk-UA или любое uk*
+  return (
+    availableVoices.find(v => v.lang === 'uk-UA') ||
+    availableVoices.find(v => (v.lang || '').toLowerCase().startsWith('uk')) ||
+    availableVoices[0] ||
+    null
+  );
 }
 
+// ===================
+// Speak
+// ===================
 function speakNext(number) {
   if (!('speechSynthesis' in window)) return;
+
+  // ✅ важное: не говорим пока не unlocked
+  if (!audioUnlocked) {
+    console.warn('🔇 Audio still locked, skip speak');
+    return;
+  }
 
   const text = `Пацієнт з номером ${number}, Ви наступний. Будь ласка, проходьте.`;
   const u = new SpeechSynthesisUtterance(text);
@@ -164,8 +226,12 @@ function speakNext(number) {
   u.rate = 0.9;
   u.pitch = 1;
 
-  speechSynthesis.cancel();
-  speechSynthesis.speak(u);
+  try {
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  } catch(e) {
+    console.warn('speak error:', e);
+  }
 }
 
 // слушаем call (его пишет регистратор)
@@ -279,7 +345,7 @@ function checkSilenceSchedule() {
 setInterval(checkSilenceSchedule, 20 * 1000);
 checkSilenceSchedule();
 
-// ТВ слушает silence и показывает overlay (и может говорить)
+// ТВ слушает silence и показывает overlay
 let silenceTimer = null;
 db.ref('system/silence').on('value', snap => {
   const v = snap.val();
@@ -288,8 +354,6 @@ db.ref('system/silence').on('value', snap => {
 
   if (active) {
     showOverlay('Хвилина мовчання', 'Просимо вшанувати пам’ять загиблих.', 60000);
-    // можно озвучить:
-    // speakNext(''); // не нужно
   } else {
     noticeOverlay.classList.remove('show');
     noticeOverlay.setAttribute('aria-hidden', 'true');
