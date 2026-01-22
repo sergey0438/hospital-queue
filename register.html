@@ -51,7 +51,6 @@
       audioUnlocked = true;
 
       try {
-        // "пустая" фраза чтобы снять блокировку
         const u = new SpeechSynthesisUtterance(' ');
         u.lang = 'uk-UA';
         speechSynthesis.speak(u);
@@ -62,28 +61,23 @@
     window.addEventListener('pointerdown', unlockAudioOnce, { once: true });
     window.addEventListener('keydown', unlockAudioOnce, { once: true });
 
-    // 2) ✅ ЯВНАЯ загрузка/выбор украинского голоса (исправляет "русское произношение")
+    // 2) ЯВНАЯ загрузка/выбор украинского голоса
     let voices = [];
     function loadVoices() {
       voices = speechSynthesis.getVoices() || [];
-      // можно раскомментировать для отладки:
-      // console.log('voices:', voices.map(v => `${v.lang} — ${v.name}`));
     }
     loadVoices();
     speechSynthesis.onvoiceschanged = loadVoices;
 
     function getUkVoice() {
-      // uk-UA или любое uk*
       return voices.find(v => v.lang === 'uk-UA' || (v.lang || '').toLowerCase().startsWith('uk')) || null;
     }
 
     function speakUA(text) {
       if (!('speechSynthesis' in window)) return;
-      if (!audioUnlocked) return; // тихо, пока не было клика
+      if (!audioUnlocked) return;
 
       const u = new SpeechSynthesisUtterance(text);
-
-      // ✅ ключевое: назначаем голос
       const uk = getUkVoice();
       if (uk) u.voice = uk;
 
@@ -110,28 +104,30 @@
       });
     }
 
-    let lastSilenceTsSpoken = 0;
+    // ✅ FIX: запоминаем последнее "событие" молчания (чтобы не повторялось при reconnect / добавлении пациента)
+    let lastSilenceEventIdSpoken = Number(localStorage.getItem('lastSilenceEventIdSpoken') || 0);
     let silenceTimer = null;
 
     db.ref('system/silence').on('value', snap => {
       const v = snap.val();
       const now = Date.now();
-      const active = !!v && (v.active === true || (typeof v.until === 'number' && v.until > now));
+
+      // ✅ FIX: активность ТОЛЬКО по until (иначе active:true может зависнуть навсегда)
+      const active = !!v && (typeof v.until === 'number' && v.until > now);
 
       setRegistrarBlocked(active);
 
-      // ✅ FIX: вместо v.ts используем startedAt (или fallback)
-      const eventTs = (v && typeof v.startedAt === 'number') ? v.startedAt
-                    : (v && typeof v.ts === 'number') ? v.ts
-                    : 0;
+      // ✅ FIX: стабильный id события (startedAt/ts/until)
+      const eventId = v ? Number(v.startedAt || v.ts || v.until || 0) : 0;
 
-      // озвучить 1 раз на событие
-      if (active && eventTs > lastSilenceTsSpoken) {
-        lastSilenceTsSpoken = eventTs;
+      // ✅ озвучить 1 раз на событие + сохранить в localStorage
+      if (active && eventId && eventId > lastSilenceEventIdSpoken) {
+        lastSilenceEventIdSpoken = eventId;
+        localStorage.setItem('lastSilenceEventIdSpoken', String(eventId));
         speakUA('Увага! Оголошено хвилину мовчання.');
       }
 
-      // локальный таймер, чтобы точно убрать блокировку по until
+      // ✅ локальный таймер, чтобы точно снять блокировку по until
       if (silenceTimer) clearTimeout(silenceTimer);
       if (active && typeof v.until === 'number') {
         const msLeft = Math.max(0, v.until - now);
@@ -195,11 +191,11 @@
           }
         });
 
-        // если сейчас silence активен — заблокируем новые кнопки
+        // ✅ если silence активен — блокируем заново (после перерисовки списка)
         db.ref('system/silence').get().then(ss => {
           const v = ss.val();
           const now = Date.now();
-          const active = v && (v.active === true || (typeof v.until === 'number' && v.until > now));
+          const active = v && (typeof v.until === 'number' && v.until > now);
           setRegistrarBlocked(!!active);
         });
       });
@@ -238,7 +234,6 @@
           }
         });
 
-        // текущий вышел
         db.ref('queue/' + number).update({
           status: 'in',
           announced: true
