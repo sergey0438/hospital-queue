@@ -550,7 +550,7 @@ function announceSilence(){
   setTimeout(() => {
     TTS.replace(() => {
       TTS.say(
-        "Шановні пацієнти! Увага! О двадцятій годині десять хвилин " +
+        "Шановні пацієнти! Увага! О девʼятій годині " +
         "оголошується Всеукраїнська хвилина мовчання. " +
         "Просимо зупинитися і вшанувати пам'ять загиблих героїв.",
         { rate: 0.78, pitch: 0.96 }
@@ -675,9 +675,9 @@ function chkSil(){
     hour:'2-digit',minute:'2-digit',hour12:false
   }).formatToParts(new Date()).forEach(x=>{if(x.type!=='literal')p[x.type]=x.value;});
   const dk=`${p.year}-${p.month}-${p.day}`;
-  if(p.hour==='20'&&p.minute==='12'&&dk!==lastSil){
+if(p.hour==='09'&&p.minute==='00'&&dk!==lastSil){
     lastSil=dk;
-    showModal('Хвилина мовчання','О 20:10 оголошено Всеукраїнську хвилину мовчання.',12000);
+    showModal('Хвилина мовчання','О 09:00 оголошено Всеукраїнську хвилину мовчання.',12000);
     announceSilence();
   }
 }
